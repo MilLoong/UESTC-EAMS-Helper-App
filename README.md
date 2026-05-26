@@ -4,6 +4,7 @@
 
 - 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
+- **下载 APK（v1.0.0）**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.0.0>（在 **Release** 页面下载 `UESTC-EAMS-Helper.apk` 或 附带的安装包 后安装）
 
 ## 功能概览
 
@@ -65,6 +66,8 @@
 - 网络可访问学校 **统一身份认证** 与 **移动教务**（**校园网** 即可）
 
 ## 快速开始
+
+若只需安装使用，可直接从 [v1.0.0 Release](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.0.0) 下载 APK，无需自行编译。
 
 1. **Clone** 本仓库，用 **Android Studio** 打开工程根目录。
 2. 连接 **真机** 或启动 **模拟器**，菜单 **Run** 运行，或执行：
