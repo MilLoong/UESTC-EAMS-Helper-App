@@ -275,6 +275,49 @@ class CourseWebFragment : Fragment() {
 
     fun currentTopUrl(): String? = _binding?.webView?.url?.trim()?.takeUnless { it.isEmpty() }
 
+    fun urlBarText(): String? = _binding?.edtWebUrl?.text?.toString()?.trim()?.takeUnless { it.isEmpty() }
+
+    /** 导入会话时用于校验：WebView 当前 URL 优先，否则用地址栏（避免 SPA 未同步时误判）。 */
+    fun currentImportPageUrl(): String? {
+        currentTopUrl()?.let { return it }
+        val bar = _binding?.edtWebUrl?.text?.toString()?.trim().orEmpty()
+        return normalizeUserUrl(bar) ?: bar.takeIf { it.startsWith("http", ignoreCase = true) }
+    }
+
+    /** 读取移动教务前端可能放在 storage 里的 JWT（Cookie 读不到 HttpOnly / 仅 localStorage 时）。 */
+    fun readBladeStorageToken(onResult: (String) -> Unit) {
+        val w = _binding?.webView
+        if (w == null) {
+            onResult("")
+            return
+        }
+        val script =
+            """
+            (function(){
+              try {
+                var stores=[localStorage,sessionStorage];
+                var keys=['saber-access-token','access_token','token','Blade-Auth'];
+                for (var s=0;s<stores.length;s++) {
+                  var st=stores[s];
+                  if(!st) continue;
+                  for (var i=0;i<keys.length;i++) {
+                    var v=st.getItem(keys[i]);
+                    if(v&&v.split('.').length>=3&&v.length>20) return v;
+                  }
+                  for (var j=0;j<st.length;j++) {
+                    var v=st.getItem(st.key(j));
+                    if(v&&v.split('.').length>=3&&v.length>20) return v;
+                  }
+                }
+              } catch(e) {}
+              return '';
+            })()
+            """.trimIndent()
+        w.evaluateJavascript(script) { raw ->
+            onResult(WebViewCookieReader.unwrapEvaluateJavascriptString(raw))
+        }
+    }
+
     /** 刷新 CookieManager，便于随后读取 Cookie。 */
     fun postFlushCookiesSync() {
         val w = _binding?.webView

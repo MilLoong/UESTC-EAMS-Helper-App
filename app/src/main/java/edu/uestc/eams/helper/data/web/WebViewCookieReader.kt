@@ -23,11 +23,29 @@ object WebViewCookieReader {
             "${ApiConstants.CAS_ORIGIN}/authserver/login",
             "${ApiConstants.CAS_ORIGIN}/authserver/",
             ApiConstants.CAS_SERVICE_RAW,
+            "${ApiConstants.EAMSAPP_ORIGIN}/",
+            ApiConstants.EAMSAPP_CAS_LOGIN_API,
+            "${ApiConstants.EAMSAPP_ORIGIN}/api/",
             ApiConstants.ONLINE_PAGE_URL,
             ApiConstants.ONLINE_SCHEDULE_LIST_URL,
             "https://portal.uestc.edu.cn/",
             "https://portal.uestc.edu.cn/auth/",
         )
+
+    fun listProbeUrls(prioritizedUrls: List<String> = emptyList()): List<String> =
+        buildProbeUrls(prioritizedUrls)
+
+    fun probeRawCookieHeader(url: String): String? {
+        if (!url.trim().startsWith("http")) return null
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            flush()
+        }
+        return CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }
+    }
+
+    fun parseCookiePairsPublic(raw: String, domain: String, secure: Boolean): List<StoredCookie> =
+        parseCookiePairs(raw, domain, secure)
 
     fun collectUeStcSnapshot(prioritizedUrls: List<String> = emptyList()): List<StoredCookie> {
         CookieManager.getInstance().apply {
@@ -89,6 +107,11 @@ object WebViewCookieReader {
             if (base.host.lowercase().contains("online.uestc")) {
                 add(ApiConstants.ONLINE_PAGE_URL)
                 add(ApiConstants.ONLINE_SCHEDULE_LIST_URL)
+            }
+            if (base.host.lowercase().contains("eamsapp.uestc.edu.cn")) {
+                add("${ApiConstants.EAMSAPP_ORIGIN}/")
+                add(ApiConstants.EAMSAPP_CAS_LOGIN_API)
+                add("${ApiConstants.EAMSAPP_ORIGIN}/api/")
             }
         }.distinct()
     }
