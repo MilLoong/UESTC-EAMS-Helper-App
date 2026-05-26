@@ -53,7 +53,6 @@ import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
-import edu.uestc.eams.helper.data.parser.WeekSpec
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
@@ -125,13 +124,8 @@ fun ScheduleTab(
     val weekOneMonday = shellMeta.weekOneMondayDate()
     val showSetupHint = timetableMeta == null && courses.isEmpty()
 
-    val pageCount =
-        remember(courses, timetableMeta) {
-            courses
-                .maxOfOrNull { WeekSpec.maxWeekNumber(it.weeks) }
-                ?.coerceIn(1, TIMETABLE_PAGE_COUNT)
-                ?: TIMETABLE_PAGE_COUNT
-        }
+    // 固定 30 页可滑动周次，不按课程周次字段上限截断（否则仅排到第 16 周等就无法往后浏览）
+    val pageCount = TIMETABLE_PAGE_COUNT
     val initialPage = (displayWeek - 1).coerceIn(0, pageCount - 1)
     val pagerState =
         rememberPagerState(
