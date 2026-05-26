@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import edu.uestc.eams.helper.MainActivity
 import edu.uestc.eams.helper.R
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
+import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
 
@@ -39,17 +40,14 @@ object CourseNotificationHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
+        val lead = CourseReminderPreferences(context).leadMinutes
         val ch =
             NotificationChannel(CHANNEL_ID, "上课提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "开课前约 20 分钟提醒"
+                description = "开课前 $lead 分钟内提醒"
             }
         nm.createNotificationChannel(ch)
     }
 
-    /**
-     * @param minutesUntil 距开课分钟数（正式提醒由 Worker 按实际时间差计算）。
-     * @param startTime 开课时刻，如 `10:20`；有则写入正文。
-     */
     fun showClassReminder(
         context: Context,
         courseName: String,
@@ -95,18 +93,19 @@ object CourseNotificationHelper {
         return true
     }
 
-    /** 调试：从本地课表随机抽一门课；无课表数据时不发通知。 */
+    /** 调试用：随机一门课预览通知样式。 */
     fun showPreview(context: Context, courses: List<UestcCourse>): PreviewResult {
         val pool = courses.filter { it.courseName.isNotBlank() }
         if (pool.isEmpty()) return PreviewResult.NoCourses
         val sample = pool.random()
         val room = sample.room.ifBlank { "（教室待定）" }
+        val leadMinutes = CourseReminderPreferences(context).leadMinutes
         val sent =
             showClassReminder(
                 context = context,
                 courseName = sample.courseName,
                 room = room,
-                minutesUntil = 15,
+                minutesUntil = leadMinutes,
                 startTime = UestcPeriodTime.resolvedStartTime(sample),
                 debug = true,
             )
@@ -128,17 +127,16 @@ object CourseNotificationHelper {
         val clock = startTime.trim()
         val timing =
             when {
+                debug && minutesUntil != null && minutesUntil > 0 -> {
+                    val countdown = "${minutesUntil} 分钟后开始"
+                    val suffix = "（调试预览，提前提醒设定）"
+                    if (clock.isNotEmpty()) "$countdown（$clock）$suffix" else "$countdown$suffix"
+                }
                 minutesUntil != null && minutesUntil > 0 -> {
                     val countdown = "${minutesUntil} 分钟后开始"
                     if (clock.isNotEmpty()) "$countdown（$clock）" else countdown
                 }
                 minutesUntil == 0 -> if (clock.isNotEmpty()) "$clock 马上开始" else "马上开始"
-                debug ->
-                    if (clock.isNotEmpty()) {
-                        "15 分钟后开始（$clock，调试预览）"
-                    } else {
-                        "15 分钟后开始（调试预览）"
-                    }
                 clock.isNotEmpty() -> "$clock 即将开始"
                 else -> "即将开始"
             }

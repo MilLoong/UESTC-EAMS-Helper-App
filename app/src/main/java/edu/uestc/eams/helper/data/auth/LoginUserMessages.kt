@@ -1,6 +1,6 @@
 package edu.uestc.eams.helper.data.auth
 
-/** 将技术异常转为用户可读文案（不含 HTTP/execution/CASTGC 等术语）。 */
+/** 登录错误转用户可读文案。 */
 object LoginUserMessages {
 
     fun fromThrowable(t: Throwable?): String {

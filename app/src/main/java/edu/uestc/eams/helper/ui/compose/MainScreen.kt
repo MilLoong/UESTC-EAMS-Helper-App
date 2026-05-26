@@ -1,8 +1,14 @@
 package edu.uestc.eams.helper.ui.compose
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,6 +56,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.CourseWebActivity
 import edu.uestc.eams.helper.R
 import edu.uestc.eams.helper.data.network.ApiConstants
@@ -61,6 +68,10 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val importLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { viewModel.importWakeUpTimetable(context, it) }
+        }
 
     LaunchedEffect(state.message) {
         val msg = state.message ?: return@LaunchedEffect
@@ -105,6 +116,15 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         enabled = !state.contentLoading,
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    }
+                    TextButton(
+                        onClick = {
+                            importLauncher.launch(
+                                arrayOf("text/html", "text/plain", "application/octet-stream"),
+                            )
+                        },
+                    ) {
+                        Text("导入")
                     }
                     TextButton(
                         onClick = {
@@ -166,7 +186,11 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                     ProfileTab(
                         loggedIn = state.loggedIn,
                         profile = state.userProfile,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        reminderLeadMinutes = state.reminderLeadMinutes,
+                        onReminderLeadMinutesChange = { viewModel.setReminderLeadMinutes(it) },
                         onLogin = { viewModel.showLogin() },
+                        onCheckUpdate = { viewModel.checkAppUpdate(force = true) },
                         onDebugNotify = { viewModel.previewCourseNotification() },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -175,6 +199,51 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
         }
+    }
+
+    state.updatePrompt?.let { update ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUpdatePrompt() },
+            title = { Text("发现新版本 ${update.versionLabel}") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "当前版本：${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (update.releaseNotes.isNotBlank()) {
+                        Text(
+                            update.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    } else {
+                        Text(
+                            "建议下载安装最新版本以获得修复与功能更新。",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl)),
+                        )
+                        viewModel.clearUpdatePrompt()
+                    },
+                ) {
+                    Text("前往下载")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissUpdatePrompt() }) {
+                    Text("稍后")
+                }
+            },
+        )
     }
 
     if (state.showLogin || (!state.loggedIn && state.courses.isEmpty() && !state.loginDeferred)) {
@@ -219,6 +288,11 @@ private fun LoginDialog(
         title = { Text("统一身份认证登录") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.login_freeze_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
                 if (!loginStatus.isNullOrBlank()) {
                     Text(
                         loginStatus,

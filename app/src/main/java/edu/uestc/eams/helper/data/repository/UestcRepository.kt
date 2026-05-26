@@ -8,7 +8,10 @@ import edu.uestc.eams.helper.data.local.AcademicCache
 import edu.uestc.eams.helper.data.network.InMemoryCookieJar
 import edu.uestc.eams.helper.data.parser.ExamJsonParser
 import edu.uestc.eams.helper.data.parser.GradesJsonParser
+import edu.uestc.eams.helper.data.parser.CourseWeekFilter
+import edu.uestc.eams.helper.data.parser.TeachingWeekEstimator
 import edu.uestc.eams.helper.data.parser.TimetableJsonParser
+import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.data.session.SessionCookieStorage
 import edu.uestc.eams.helper.data.auth.ReauthSmsSendOutcome
 import edu.uestc.eams.helper.domain.model.ExamItem
@@ -21,9 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 
-/**
- * 统一数据入口：统一身份认证登录、移动教务会话、课表/成绩/考试拉取与本地缓存。
- */
+/** 课表、成绩、考试与登录会话的统一数据入口。 */
 class UestcRepository(
     private val client: OkHttpClient,
     private val jar: InMemoryCookieJar,
@@ -39,7 +40,7 @@ class UestcRepository(
             cookieHeaderOrNull()?.let { api.probeSession(it) } == true
         }
 
-    /** 登录二次认证等待短信时，重新请求下发验证码（受服务端 codeTime 冷却约束）。 */
+    /** 重新发送登录短信验证码。 */
     suspend fun resendLoginSms(): Result<ReauthSmsSendOutcome> =
         withContext(Dispatchers.IO) {
             casRepository.resendReauthDynamicCode()
@@ -60,16 +61,21 @@ class UestcRepository(
                 }
         }
 
-    /**
-     * 加载指定教学周课表。
-     * @param forceNetwork true 时强制请求接口（如用户点顶栏刷新）；false 时若本地已缓存该周则不再请求。
-     */
+    /** 加载指定教学周课表；[forceNetwork] 为 false 时优先读本地缓存。 */
     suspend fun refreshTimetable(
         week: Int? = null,
         forceNetwork: Boolean = false,
     ): Result<List<UestcCourse>> =
         withContext(Dispatchers.IO) {
             runCatching {
+                if (!forceNetwork && cache.isOfflineImported()) {
+                    val meta =
+                        cache.loadTimetableMeta()
+                            ?: throw IllegalStateException("暂无导入课表")
+                    val displayWeek = week?.coerceAtLeast(1) ?: meta.displayWeek
+                    cache.saveTimetableMeta(meta.copy(displayWeek = displayWeek))
+                    return@runCatching cache.loadCourses()
+                }
                 val ck = ensureMobileCookieHeader()
                 val semester = api.fetchCurSemesterCode(ck) ?: "25262"
                 val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
@@ -97,6 +103,7 @@ class UestcRepository(
                 cache.saveWeekCourses(semester, displayWeek, courses)
                 cache.saveCourses(courses)
                 cache.saveTimetableMeta(meta)
+                cache.setOfflineImported(false)
                 courses
             }
         }
@@ -104,9 +111,7 @@ class UestcRepository(
     fun hasCachedTimetableWeek(semesterCode: String, week: Int): Boolean =
         cache.hasWeekCourses(semesterCode, week)
 
-    /**
-     * 后台每日同步：本学期当前教学周若今天已拉取且本地有缓存则跳过，否则请求接口。
-     */
+    /** 后台每日同步当前教学周课表，当日已同步则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -149,7 +154,7 @@ class UestcRepository(
             }
         }
 
-    /** 登录成功后一次性同步：资料 + 当前周课表 + 成绩 + 考试。 */
+    /** 登录成功后拉取资料、课表、成绩与考试。 */
     suspend fun refreshAllAfterLogin(): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -162,10 +167,7 @@ class UestcRepository(
             }
         }
 
-    /**
-     * 顶栏刷新：只更新当前 Tab 对应数据，减少对教务系统的重复请求。
-     * @param tab 0 课表 1 考试 2 成绩 3 我的
-     */
+    /** 按当前 Tab 只刷新对应数据。 */
     suspend fun refreshForTab(tab: Int, timetableDisplayWeek: Int?): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -206,6 +208,40 @@ class UestcRepository(
 
     fun cachedCourses(): List<UestcCourse> = cache.loadCourses()
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
+    fun isOfflineImported(): Boolean = cache.isOfflineImported()
+
+    /** 从 WakeUp 导出的 HTML 导入课表并覆盖本地缓存。 */
+    suspend fun importWakeUpTimetableFile(fileText: String): Result<Int> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val parsed = WakeUpShuweiHtmlParser.parse(fileText)
+                val currentWeek =
+                    TeachingWeekEstimator.estimate(parsed.year, parsed.maxWeek)
+                val meta =
+                    TimetableMeta(
+                        semesterCode = AcademicCache.IMPORT_SEMESTER,
+                        currentWeek = currentWeek,
+                        displayWeek = currentWeek,
+                    )
+                cache.saveCourses(parsed.courses)
+                cache.saveTimetableMeta(meta)
+                cache.setOfflineImported(true)
+                for (w in 1..parsed.maxWeek) {
+                    val weekCourses = CourseWeekFilter.filterForWeek(parsed.courses, w)
+                    cache.saveWeekCourses(AcademicCache.IMPORT_SEMESTER, w, weekCourses)
+                }
+                parsed.courses.size
+            }
+        }
+
+    /** 导入课表模式下仅切换显示周次。 */
+    fun switchTimetableWeekLocal(week: Int): Boolean {
+        if (!cache.isOfflineImported()) return false
+        val meta = cache.loadTimetableMeta() ?: return false
+        val w = week.coerceAtLeast(1)
+        cache.saveTimetableMeta(meta.copy(displayWeek = w))
+        return true
+    }
     fun cachedGrades(): List<GradeItem> = cache.loadGrades()
     fun cachedExams(): List<ExamItem> = cache.loadExams()
 

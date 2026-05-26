@@ -7,10 +7,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/**
- * 本校常见上课节次与起止时间（清水河校区默认）。
- * 下标 0 对应第 1 节，依此类推至第 12 节。
- */
+/** 节次与上下课时间对照表。 */
 object UestcPeriodTime {
 
     data class PeriodSlot(val index: Int, val start: String, val end: String)

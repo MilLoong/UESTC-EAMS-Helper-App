@@ -2,6 +2,7 @@ package edu.uestc.eams.helper.ui.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
+import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
@@ -79,11 +82,14 @@ fun ScheduleTab(
         }
     val visible =
         remember(courses, displayWeek) {
-            CourseWeekFilter.filterForWeek(courses, displayWeek)
+            AdjacentCourseMerge.merge(CourseWeekFilter.filterForWeek(courses, displayWeek))
         }
 
     if (courses.isEmpty() && timetableMeta == null) {
-        EmptyHint("暂无课表\n登录或 Web [导入会话] 后点 [刷新]", modifier)
+        EmptyHint(
+            "暂无课表\n登录或 Web [导入会话] 后点 [刷新]\n或顶栏 [导入] WakeUp 树维导出的 HTML",
+            modifier,
+        )
         return
     }
 
@@ -106,7 +112,27 @@ fun ScheduleTab(
             " - " +
             TimetableWeekCalendar.formatHeaderDate(weekMonday.plusDays(6))
 
-    Column(modifier.fillMaxSize()) {
+    val density = LocalDensity.current
+    val swipeThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .pointerInput(onPrevWeek, onNextWeek, swipeThresholdPx) {
+                var dragTotal = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dragTotal = 0f },
+                    onHorizontalDrag = { _, delta -> dragTotal += delta },
+                    onDragEnd = {
+                        when {
+                            dragTotal > swipeThresholdPx -> onPrevWeek()
+                            dragTotal < -swipeThresholdPx -> onNextWeek()
+                        }
+                    },
+                    onDragCancel = { dragTotal = 0f },
+                )
+            },
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()

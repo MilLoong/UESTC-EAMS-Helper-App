@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,13 +30,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import edu.uestc.eams.helper.AppLinks
 import edu.uestc.eams.helper.BuildConfig
+import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
 import edu.uestc.eams.helper.domain.model.UserProfile
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileTab(
     loggedIn: Boolean,
     profile: UserProfile?,
+    appVersion: String,
+    reminderLeadMinutes: Int,
+    onReminderLeadMinutesChange: (Int) -> Unit,
     onLogin: () -> Unit,
+    onCheckUpdate: () -> Unit = {},
     onDebugNotify: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -70,11 +79,39 @@ fun ProfileTab(
             }
         }
 
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("上课提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "在距开课 1～$reminderLeadMinutes 分钟内发送通知（后台约每 15 分钟检查）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(
+                "提前提醒时间",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            FlowRow(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CourseReminderPreferences.presetMinutes.forEach { minutes ->
+                    FilterChip(
+                        selected = reminderLeadMinutes == minutes,
+                        onClick = { onReminderLeadMinutesChange(minutes) },
+                        label = { Text("${minutes} 分钟") },
+                    )
+                }
+            }
+        }
+
         if (BuildConfig.DEBUG && onDebugNotify != null) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("调试", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "预览上课提醒通知样式",
+                    "按上方「提前 $reminderLeadMinutes 分钟」设定预览通知正文",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     modifier = Modifier.padding(top = 6.dp),
@@ -98,6 +135,23 @@ fun ProfileTab(
                     )
                     Text("试发上课通知")
                 }
+            }
+        }
+
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("关于", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "当前版本 $appVersion",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            OutlinedButton(
+                onClick = onCheckUpdate,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            ) {
+                Text("检查更新")
             }
         }
 

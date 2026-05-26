@@ -16,7 +16,7 @@ import edu.uestc.eams.helper.worker.CourseNotificationWorker
 import edu.uestc.eams.helper.worker.TimetableSyncWorker
 import java.util.concurrent.TimeUnit
 
-/** 应用级依赖：网络客户端、登录模块、数据仓库与本地缓存。 */
+/** Application 级依赖注入入口。 */
 class EamsHelperApp : Application() {
 
     val cookieJar = InMemoryCookieJar()

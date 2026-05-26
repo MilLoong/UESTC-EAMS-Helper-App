@@ -9,64 +9,44 @@ import java.net.URLEncoder
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/**
- * 统一认证、移动教务、一网通等站点地址与请求头约定。
- */
+/** 各站点 URL 与 OkHttp 默认请求头。 */
 object ApiConstants {
 
     const val CAS_BASE_URL = "https://idas.uestc.edu.cn/authserver"
-    /** Idas/CAS HTML 表单里常有根相对 `/authserver/…` 跳转，基于此 origin resolve。 */
     const val CAS_ORIGIN = "https://idas.uestc.edu.cn"
     const val BASE_EAMS = "https://eams.uestc.edu.cn"
 
-    /** 一网通门户根地址（旧版课表拉取备选）。 */
     const val ONLINE_ORIGIN = "https://online.uestc.edu.cn"
 
-    /** Struts 表单一次性参数名（固定 `4oY1vBSn`）。*/
     const val ONLINE_STRUTS_ONCE_PARAM = "4oY1vBSn"
 
     val ONLINE_PAGE_URL: String get() = "$ONLINE_ORIGIN/page/"
 
     val ONLINE_SCHEDULE_LIST_URL: String get() = "$ONLINE_ORIGIN/page/scheduleList"
 
-    /** POST `schedule/index`，query 中带一次性 Struts 参数与 token。 */
     fun buildOnlineScheduleIndexUrl(token: String): HttpUrl =
         ONLINE_ORIGIN.toHttpUrl().newBuilder()
             .encodedPath("/site/schedule/index")
             .addQueryParameter(ONLINE_STRUTS_ONCE_PARAM, token)
             .build()
 
-    /** 移动教务 H5/API 根地址。 */
     const val EAMSAPP_ORIGIN = "https://eamsapp.uestc.edu.cn"
 
     const val EAMSAPP_CAS_LOGIN_API = "$EAMSAPP_ORIGIN/api/blade-auth/cas-login"
 
-    /**
-     * CAS 回调地址：`redirectUrl` 须为明文拼接，勿对已编码的 URL 二次编码。
-     */
     val EAMSAPP_CAS_SERVICE: String
         get() = "$EAMSAPP_CAS_LOGIN_API?redirectUrl=$EAMSAPP_ORIGIN"
 
-    /** 移动教务 API 使用的 Basic 认证头。 */
     const val EAMSAPP_AUTHORIZATION_BASIC = "YXBwOmFwcF9zZWNyZXQ="
 
-    /**
-     * 默认 CAS 登录成功后跳转到移动教务。
-     * 一网通旧路径见 ONLINE_CAS_SERVICE。
-     */
     val CAS_SERVICE_RAW: String get() = EAMSAPP_CAS_SERVICE
 
-    /** 一网通门户取票（旧方案，仅作备选）。 */
     val ONLINE_CAS_SERVICE: String
         get() =
             "${ONLINE_ORIGIN}/common/actionCasLogin?" +
                 "redirect_url=" +
                 URLEncoder.encode("${ONLINE_ORIGIN}/page/", Charsets.UTF_8.name())
 
-    /**
-     * 教务取票 `service=https://eams.uestc.edu.cn/eams/login.action`
-     *（旧路径；易导致门户 `schedule/index` 401，不推荐作为默认）。
-     */
     const val EAMS_SERVICE_RAW = "$BASE_EAMS/eams/login.action"
 
     fun casServiceEncoded(): String =
@@ -75,15 +55,11 @@ object ApiConstants {
     fun casLoginUrlWithService(): String =
         "$CAS_BASE_URL/login?service=${casServiceEncoded()}"
 
-    /**
-     * 登录页 Referer：`service` 查询串保持明文（与整页 URL 编码方式不同）。
-     */
     fun casLoginRefererPlain(): String =
         "$CAS_BASE_URL/login?service=${CAS_SERVICE_RAW}"
 
     val EAMS_HOME_URL get() = "$BASE_EAMS/eams/home.action"
 
-    /** 对齐脚本课表链默认 `menu.id`（844）：WebView/教务备选预取仍可选用。 */
     const val DEFAULT_EAMS_MENU_ID = "844"
 
     val EAMS_CHILDMENUS_URL get() =
