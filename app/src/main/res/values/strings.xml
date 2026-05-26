@@ -1,3 +1,22 @@
 <resources>
-    <string name="app_name">UESTC EAMS Helper</string>
+    <string name="app_name">成电教务助手</string>
+
+    <string name="login_browser_fallback_hint">若 App 内登录不成功，可点 Web 打开网页登录，再 [导入会话] 后点 [刷新]。</string>
+
+    <string name="browser_activity_title">Web</string>
+    <string name="web_import_guide_title">导入会话前请先登录</string>
+    <string name="web_import_guide_message">请在本页完成统一认证登录，直到能正常打开移动教务（例如能看到课表相关页面）。\n\n确认已登录成功后，再点右上角或页面底部的 [导入会话]，然后返回主页点 [刷新] 即可同步课表。</string>
+    <string name="web_import_guide_ok">我知道了</string>
+    <string name="btn_frag_webview_cookie">导入会话</string>
+    <string name="menu_webview_import_session">导入会话</string>
+    <string name="btn_web_back">网页返回</string>
+    <string name="btn_web_reload">刷新网页</string>
+    <string name="hint_web_url">默认统一认证登录页；可改网址后点 [前往]</string>
+    <string name="btn_web_navigate">前往</string>
+    <string name="toast_web_need_url">请先输入网址</string>
+    <string name="toast_web_url_invalid">无法解析网址，请以 https:// 开头或输入域名</string>
+
+    <string name="toast_wv_cookies_none">未读到会话，请先在移动教务页面登录后再导入。</string>
+    <string name="toast_wv_cookies_overwritten">会话已覆盖，返回主页点 [刷新] 即可。</string>
+    <string name="toast_wv_browser_not_ready">页面未就绪</string>
 </resources>

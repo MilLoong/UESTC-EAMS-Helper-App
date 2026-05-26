@@ -8,8 +8,11 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+# Gradle / Android：`intermediates` 等在各自的 `**/build/` 下，全部为生成内容，勿提交。
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+/.ddoge_ref/
+.kotlin/
