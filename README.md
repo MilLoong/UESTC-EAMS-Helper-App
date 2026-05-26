@@ -4,7 +4,7 @@
 
 - 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
-- **下载 APK**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest>
+- **下载 APK**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest>（下载 `UESTC-EAMS-Helper.apk` 后安装）
 
 ## 功能概览
 
