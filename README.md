@@ -2,7 +2,7 @@
 
 **UESTC 教务系统助手**，**安卓 App**，支持 **课表信息、考试时间、考试成绩** 查询，**2026 最新**
 
-- 本仓库**（安卓）**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
+- 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
 
 ## 功能概览
