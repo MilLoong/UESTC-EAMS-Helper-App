@@ -90,7 +90,7 @@
 ./gradlew assembleDebug
 ```
 
-3. Debug 安装包路径：`app/build/outputs/apk/debug/成电教务助手.apk`。
+3. Debug 安装包路径：`app/build/outputs/apk/debug/UESTC-EAMS-Helper.apk`。
 
 ## 构建与发布
 
