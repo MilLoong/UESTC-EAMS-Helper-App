@@ -8,6 +8,7 @@
     <string name="web_import_guide_title">导入会话前请先登录</string>
     <string name="web_import_guide_message">请在本页完成统一认证登录，直到能正常打开移动教务（例如能看到课表相关页面）。\n\n确认已登录成功后，再点右上角或页面底部的 [导入会话]，然后返回主页点 [刷新] 即可同步课表。</string>
     <string name="web_import_guide_ok">我知道了</string>
+    <string name="web_import_failure_report_title">导入失败 · 排障信息</string>
     <string name="btn_frag_webview_cookie">导入会话</string>
     <string name="menu_webview_import_session">导入会话</string>
     <string name="btn_web_back">网页返回</string>
