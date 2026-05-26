@@ -68,7 +68,7 @@ class AppUpdateChecker(
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
             if (!name.endsWith(".apk", ignoreCase = true) || url.isBlank()) continue
-            if (name.contains("成电") || name.contains("UESTC", ignoreCase = true)) return url
+            if (name.contains("UESTC-EAMS-Helper", ignoreCase = true)) return url
             fallback = url
         }
         return fallback

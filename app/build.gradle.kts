@@ -69,7 +69,7 @@ afterEvaluate {
                     ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
                     ?.maxByOrNull { it.lastModified() }
                     ?: return@doLast
-            val dest = apkDir.resolve("成电教务助手.apk")
+            val dest = apkDir.resolve("UESTC-EAMS-Helper.apk")
             if (source.absolutePath != dest.absolutePath) {
                 source.copyTo(dest, overwrite = true)
                 source.delete()
