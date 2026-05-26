@@ -100,6 +100,8 @@ dependencies {
     implementation(libs.fragment.ktx)
     implementation(libs.lifecycle.runtime.ktx)
 
+    testImplementation(platform(libs.compose.bom))
+    testImplementation("androidx.compose.ui:ui-text")
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.kotlin.coroutines.core)
