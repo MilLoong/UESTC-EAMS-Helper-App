@@ -4,7 +4,7 @@
 
 - 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
-- **下载 APK（v1.0.7）**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.0.7>（在 **Release** 页面下载 `UESTC-EAMS-Helper.apk` 后安装）
+- **下载 APK（v1.1.0，最新版见 [Releases](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest)）**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.1.0>（在 **Release** 页面下载 `UESTC-EAMS-Helper.apk` 后安装）
 
 ## 功能概览
 
@@ -81,7 +81,7 @@
 
 ## 快速开始
 
-若只需安装使用，可直接从 [v1.0.0 Release](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.0.0) 下载 APK，无需自行编译。
+若只需安装使用，可直接从 [最新 Release](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest) 下载 APK，无需自行编译。
 
 1. **Clone** 本仓库，用 **Android Studio** 打开工程根目录。
 2. 连接 **真机** 或启动 **模拟器**，菜单 **Run** 运行，或执行：
@@ -96,6 +96,32 @@
 
 - 日常调试：`assembleDebug`
 - 本工程默认关闭 `assembleRelease` 相关任务；需要发布包时请自行配置签名与 ProGuard。
+
+### 用 GitHub Actions 发版
+
+应用内更新检查的是 [UESTC-EAMS-Helper-App Releases](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases)。源码在本仓库 **UESTC-EAMS-Helper**，打标签后由 Action 自动编译并上传 APK，无需再手动建标签页、传 APK。
+
+**一次性配置**
+
+1. 打开 [GitHub PAT 设置](https://github.com/settings/tokens)，新建 **classic** token，勾选 **repo**。
+2. 在本仓库 **Settings → Secrets and variables → Actions** 新建 secret：`RELEASE_REPO_TOKEN`，值为上述 token。
+
+**每次发版**
+
+1. 修改 `app/build.gradle.kts` 里的 `versionCode`、`versionName`。
+2. 提交并推送源码：`git push origin master`
+3. 打标签并推送，标签须与 `versionName` 一致，例如 `1.1.0` 对应 `v1.1.0`：
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+推送标签后会触发 [Release APK](.github/workflows/release-apk.yml)，约数分钟内 **UESTC-EAMS-Helper-App** 会出现对应 Release 与 `UESTC-EAMS-Helper.apk`。
+
+也可在 **Actions → Release APK → Run workflow** 手动填写 `v1.1.0` 与 Release 说明，无需本地打标签。
+
+**注意**：Release 说明请写在 GitHub Release 页面或 workflow 的 `notes` 输入框，不要写进 `git commit -m`。
 
 ## 技术栈
 
