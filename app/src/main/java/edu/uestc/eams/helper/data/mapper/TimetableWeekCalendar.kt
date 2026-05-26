@@ -12,7 +12,11 @@ object TimetableWeekCalendar {
         displayWeek: Int,
         currentWeek: Int,
         today: LocalDate = LocalDate.now(),
+        weekOneMonday: LocalDate? = null,
     ): LocalDate {
+        weekOneMonday?.let { anchor ->
+            return anchor.plusWeeks((displayWeek - 1).toLong())
+        }
         val thisMonday = today.with(DayOfWeek.MONDAY)
         return thisMonday.plusWeeks((displayWeek - currentWeek).toLong())
     }

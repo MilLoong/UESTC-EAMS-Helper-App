@@ -88,6 +88,7 @@ fun ScheduleTab(
     val today = LocalDate.now()
     val currentWeek = timetableMeta?.currentWeek ?: 1
     val displayWeek = timetableMeta?.displayWeek ?: currentWeek
+    val weekOneMonday = timetableMeta?.weekOneMondayDate()
 
     if (courses.isEmpty() && timetableMeta == null) {
         EmptyHint(
@@ -119,7 +120,12 @@ fun ScheduleTab(
     }
     val weekMonday =
         remember(headerWeek, currentWeek) {
-            TimetableWeekCalendar.mondayOfDisplayedWeek(headerWeek, currentWeek, today)
+            TimetableWeekCalendar.mondayOfDisplayedWeek(
+                headerWeek,
+                currentWeek,
+                today,
+                weekOneMonday,
+            )
         }
     val isCurrentWeek = headerWeek == currentWeek
     val weekRangeSubtitle =
@@ -226,6 +232,7 @@ fun ScheduleTab(
                 courses = courses,
                 currentWeek = currentWeek,
                 today = today,
+                weekOneMonday = weekOneMonday,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -238,11 +245,17 @@ private fun ScheduleWeekPage(
     courses: List<UestcCourse>,
     currentWeek: Int,
     today: LocalDate,
+    weekOneMonday: LocalDate?,
     modifier: Modifier = Modifier,
 ) {
     val weekMonday =
-        remember(weekNumber, currentWeek) {
-            TimetableWeekCalendar.mondayOfDisplayedWeek(weekNumber, currentWeek, today)
+        remember(weekNumber, currentWeek, weekOneMonday) {
+            TimetableWeekCalendar.mondayOfDisplayedWeek(
+                weekNumber,
+                currentWeek,
+                today,
+                weekOneMonday,
+            )
         }
     val visible =
         remember(courses, weekNumber) {

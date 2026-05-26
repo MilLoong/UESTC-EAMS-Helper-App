@@ -20,4 +20,12 @@
     <string name="toast_wv_cookies_none">未读到会话，请先在移动教务页面登录后再导入。</string>
     <string name="toast_wv_cookies_overwritten">会话已覆盖，返回主页点 [刷新] 即可。</string>
     <string name="toast_wv_browser_not_ready">页面未就绪</string>
+
+    <string name="wakeup_import_title">指定第 1 教学周</string>
+    <string name="wakeup_import_message">树维导出文件通常不含开学日期。请选择本学期第 1 周对应的任意一天（将按该周周一对齐课表日期），可与 WakeUp 学期开始或校历一致。共 %1$d 个教学周。</string>
+    <string name="wakeup_import_from_file_hint">文件中已含开学日期，下方可确认或修改。</string>
+    <string name="wakeup_import_preset_semester">校历开学周 [%1$s]</string>
+    <string name="wakeup_import_preset_first_class">第 1 周首日上课 [%1$s]</string>
+    <string name="wakeup_import_confirm">导入</string>
+    <string name="wakeup_import_cancel">取消</string>
 </resources>

@@ -15,10 +15,24 @@ object TeachingWeekEstimator {
         val cap = maxWeek.coerceAtLeast(1)
         val year = academicYear ?: today.year
         val startMonday = semesterStartMonday(year, today)
+        return weekIndexFromMonday(startMonday, today, cap)
+    }
+
+    fun estimateFromWeekOneMonday(
+        weekOneMonday: LocalDate,
+        maxWeek: Int,
+        today: LocalDate = LocalDate.now(),
+    ): Int = weekIndexFromMonday(weekOneMonday, today, maxWeek.coerceAtLeast(1))
+
+    private fun weekIndexFromMonday(
+        weekOneMonday: LocalDate,
+        today: LocalDate,
+        maxWeek: Int,
+    ): Int {
+        if (today.isBefore(weekOneMonday)) return 1
         val thisMonday = today.with(DayOfWeek.MONDAY)
-        if (thisMonday.isBefore(startMonday)) return 1
-        val weeks = ChronoUnit.WEEKS.between(startMonday, thisMonday) + 1
-        return weeks.toInt().coerceIn(1, cap)
+        val weeks = ChronoUnit.WEEKS.between(weekOneMonday, thisMonday) + 1
+        return weeks.toInt().coerceIn(1, maxWeek)
     }
 
     private fun semesterStartMonday(year: Int, today: LocalDate): LocalDate {

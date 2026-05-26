@@ -18,7 +18,10 @@ import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
+import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
+import java.time.DayOfWeek
+import java.time.LocalDate
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,6 +53,17 @@ data class MainUiState(
     val userProfile: UserProfile? = null,
     val updatePrompt: UpdatePrompt? = null,
     val reminderLeadMinutes: Int = CourseReminderPreferences.DEFAULT_LEAD_MINUTES,
+    val wakeUpImportPrompt: WakeUpImportPrompt? = null,
+)
+
+/** 树维 HTML 已解析，待用户确认第 1 教学周起始日。 */
+data class WakeUpImportPrompt(
+    val fileText: String,
+    val initialDate: LocalDate,
+    val semesterOpenDay: LocalDate,
+    val firstClassDay: LocalDate?,
+    val maxWeek: Int,
+    val fromFile: Boolean,
 )
 
 data class UpdatePrompt(
@@ -503,7 +517,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importWakeUpTimetable(context: Context, uri: Uri) {
         viewModelScope.launch {
-            _ui.update { it.copy(contentLoading = true, message = null) }
+            _ui.update { it.copy(contentLoading = true, message = null, wakeUpImportPrompt = null) }
             val text =
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -514,7 +528,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _ui.update { it.copy(contentLoading = false, message = "无法读取所选文件") }
                 return@launch
             }
-            repo.importWakeUpTimetableFile(text).fold(
+            val parsed =
+                runCatching { WakeUpShuweiHtmlParser.parse(text) }
+                    .getOrElse { e ->
+                        _ui.update {
+                            it.copy(
+                                contentLoading = false,
+                                message = e.message ?: "导入失败，请确认是 WakeUp 树维导出的 HTML",
+                            )
+                        }
+                        return@launch
+                    }
+            val semesterOpen = WakeUpShuweiHtmlParser.suggestWeekOneMonday(parsed.year)
+            val firstClass =
+                WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(parsed.courses, parsed.year)
+            val initial =
+                parsed.weekOneMonday
+                    ?: firstClass
+                    ?: semesterOpen
+            _ui.update {
+                it.copy(
+                    contentLoading = false,
+                    wakeUpImportPrompt =
+                        WakeUpImportPrompt(
+                            fileText = text,
+                            initialDate = initial,
+                            semesterOpenDay = semesterOpen,
+                            firstClassDay = firstClass,
+                            maxWeek = parsed.maxWeek,
+                            fromFile = parsed.weekOneMonday != null,
+                        ),
+                )
+            }
+        }
+    }
+
+    fun dismissWakeUpImport() {
+        _ui.update { it.copy(wakeUpImportPrompt = null) }
+    }
+
+    fun confirmWakeUpImport(selectedDay: LocalDate) {
+        val prompt = _ui.value.wakeUpImportPrompt ?: return
+        val weekOneMonday = selectedDay.with(DayOfWeek.MONDAY)
+        viewModelScope.launch {
+            _ui.update { it.copy(contentLoading = true, wakeUpImportPrompt = null) }
+            repo.importWakeUpTimetableFile(prompt.fileText, weekOneMonday).fold(
                 onSuccess = { count ->
                     reloadFromCache()
                     val week = repo.cachedTimetableMeta()?.currentWeek
