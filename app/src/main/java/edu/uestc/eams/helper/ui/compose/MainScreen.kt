@@ -175,11 +175,13 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                     ScheduleTab(
                         courses = state.courses,
                         timetableMeta = state.timetableMeta,
+                        pagerScrollWeek = state.timetablePagerScrollWeek,
                         modifier = Modifier.fillMaxSize(),
                         onPrevWeek = { viewModel.shiftTimetableWeek(-1) },
                         onNextWeek = { viewModel.shiftTimetableWeek(1) },
                         onWeekSelected = { viewModel.selectTimetableWeek(it) },
                         onGoCurrentWeek = { viewModel.goCurrentTimetableWeek() },
+                        onPagerScrollConsumed = { viewModel.consumeTimetablePagerScroll() },
                     )
                 1 -> ExamTab(state.exams, Modifier.fillMaxSize())
                 2 -> GradesTab(state.grades, Modifier.fillMaxSize())

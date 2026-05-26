@@ -89,10 +89,9 @@ class UestcRepository(
                     )
 
                 if (!forceNetwork) {
-                    cache.loadWeekCourses(semester, displayWeek)?.let { cached ->
-                        cache.saveCourses(cached)
+                    cache.loadWeekCourses(semester, displayWeek)?.let {
                         cache.saveTimetableMeta(meta)
-                        return@runCatching cached
+                        return@runCatching cache.loadTimetableCoursesForUi()
                     }
                 }
 
@@ -102,10 +101,9 @@ class UestcRepository(
                         ?: throw IllegalStateException("课表接口无数据")
                 val courses = TimetableJsonParser.parse(json)
                 cache.saveWeekCourses(semester, displayWeek, courses)
-                cache.saveCourses(courses)
                 cache.saveTimetableMeta(meta)
                 cache.setOfflineImported(false)
-                courses
+                cache.loadTimetableCoursesForUi()
             }
         }
 
@@ -207,7 +205,7 @@ class UestcRepository(
 
     fun cachedUserProfile(): UserProfile? = cache.loadUserProfile()
 
-    fun cachedCourses(): List<UestcCourse> = cache.loadCourses()
+    fun cachedCourses(): List<UestcCourse> = cache.loadTimetableCoursesForUi()
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
     fun isOfflineImported(): Boolean = cache.isOfflineImported()
 
@@ -242,13 +240,19 @@ class UestcRepository(
             }
         }
 
-    /** 导入课表模式下仅切换显示周次。 */
+    /**
+     * 仅切换教学周：树维导入只改 displayWeek；在线模式从周缓存读课表。
+     * @return 是否已有该周课表缓存（false 时需再请求网络）
+     */
     fun switchTimetableWeekLocal(week: Int): Boolean {
-        if (!cache.isOfflineImported()) return false
         val meta = cache.loadTimetableMeta() ?: return false
         val w = week.coerceAtLeast(1)
+        if (cache.isOfflineImported()) {
+            cache.saveTimetableMeta(meta.copy(displayWeek = w))
+            return true
+        }
         cache.saveTimetableMeta(meta.copy(displayWeek = w))
-        return true
+        return cache.hasWeekCourses(meta.semesterCode, w)
     }
     fun cachedGrades(): List<GradeItem> = cache.loadGrades()
     fun cachedExams(): List<ExamItem> = cache.loadExams()

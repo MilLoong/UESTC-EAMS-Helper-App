@@ -16,7 +16,7 @@ class CourseNotificationWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val courses = AcademicCache(applicationContext).loadCourses()
+        val courses = AcademicCache(applicationContext).loadTimetableCoursesForUi()
         if (courses.isEmpty()) return Result.success()
 
         val leadSec = CourseReminderPreferences(applicationContext).leadSeconds

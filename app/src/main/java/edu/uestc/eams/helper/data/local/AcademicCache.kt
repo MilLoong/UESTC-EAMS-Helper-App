@@ -34,6 +34,15 @@ class AcademicCache(context: Context) {
             gson.fromJson(it, object : TypeToken<List<UestcCourse>>() {}.type)
         } ?: emptyList()
 
+    /**
+     * 课表 UI 用课程列表：树维导入为整表；在线模式为[已拉取过的各教学周]合并，
+     * 与树维一样供 Pager 按周过滤，而不是只保留「当前周」一份。
+     */
+    fun loadTimetableCoursesForUi(): List<UestcCourse> {
+        if (isOfflineImported()) return loadCourses()
+        return rebuildMergedWeekCourses()
+    }
+
     fun hasWeekCourses(semesterCode: String, week: Int): Boolean =
         loadWeekCourses(semesterCode, week) != null
 
@@ -45,9 +54,20 @@ class AcademicCache(context: Context) {
     fun saveWeekCourses(semesterCode: String, week: Int, courses: List<UestcCourse>) {
         ensureWeekCacheSemester(semesterCode)
         val map = loadWeekCourseMap().toMutableMap()
-        map[weekKey(week)] = courses
+        map[weekKey(week)] = courses.map { tagCourseForWeekIfNeeded(it, week) }
         prefs.edit().putString(KEY_WEEK_COURSES, gson.toJson(map)).apply()
         markWeekTimetableSyncedToday(semesterCode, week)
+        if (!isOfflineImported()) {
+            saveCourses(rebuildMergedWeekCourses())
+        }
+    }
+
+    private fun rebuildMergedWeekCourses(): List<UestcCourse> =
+        loadWeekCourseMap().values.flatten()
+
+    private fun tagCourseForWeekIfNeeded(course: UestcCourse, week: Int): UestcCourse {
+        if (course.weeks.isNotBlank()) return course
+        return course.copy(weeks = week.toString())
     }
 
     /** 该教学周今天是否已同步过。 */
