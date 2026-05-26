@@ -15,8 +15,8 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.1.0"
+        versionCode = 21
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -57,6 +57,18 @@ afterEvaluate {
     ).forEach { taskName ->
         tasks.findByName(taskName)?.let { task ->
             task.enabled = false
+        }
+    }
+
+    tasks.register("printReleaseTag") {
+        group = "release"
+        description = "Print git tag commands matching versionName in this module"
+        doLast {
+            val v = android.defaultConfig.versionName
+            val code = android.defaultConfig.versionCode
+            println("versionName=$v versionCode=$code")
+            println("git tag v$v")
+            println("git push origin v$v")
         }
     }
 

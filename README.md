@@ -4,7 +4,7 @@
 
 - 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
-- **下载 APK（v1.1.0，最新版见 [Releases](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest)）**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/tag/v1.1.0>（在 **Release** 页面下载 `UESTC-EAMS-Helper.apk` 后安装）
+- **下载 APK**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest>（始终指向最新 Release，下载 `UESTC-EAMS-Helper.apk` 后安装；源码里的版本号以 `app/build.gradle.kts` 的 `versionName` 为准）
 
 ## 功能概览
 
@@ -106,20 +106,22 @@
 1. 打开 [GitHub PAT 设置](https://github.com/settings/tokens)，新建 **classic** token，勾选 **repo**。
 2. 在本仓库 **Settings → Secrets and variables → Actions** 新建 secret：`RELEASE_REPO_TOKEN`，值为上述 token。
 
-**每次发版**
+**每次发版**（README 不用改版本号，只改 `app/build.gradle.kts` 即可）
 
 1. 修改 `app/build.gradle.kts` 里的 `versionCode`、`versionName`。
 2. 提交并推送源码：`git push origin master`
-3. 打标签并推送，标签须与 `versionName` 一致，例如 `1.1.0` 对应 `v1.1.0`：
+3. 打标签并推送，标签须与 `versionName` 一致：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+./gradlew printReleaseTag
+# 按输出执行，例如：
+git tag v1.1.1
+git push origin v1.1.1
 ```
 
 推送标签后会触发 [Release APK](.github/workflows/release-apk.yml)，约数分钟内 **UESTC-EAMS-Helper-App** 会出现对应 Release 与 `UESTC-EAMS-Helper.apk`。
 
-也可在 **Actions → Release APK → Run workflow** 手动填写 `v1.1.0` 与 Release 说明，无需本地打标签。
+也可在 **Actions → Release APK → Run workflow** 手动填写 `v` 加版本号与 Release 说明，无需本地打标签。
 
 **注意**：Release 说明请写在 GitHub Release 页面或 workflow 的 `notes` 输入框，不要写进 `git commit -m`。
 
