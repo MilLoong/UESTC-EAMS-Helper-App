@@ -275,7 +275,7 @@ class CourseWebFragment : Fragment() {
 
     fun currentTopUrl(): String? = _binding?.webView?.url?.trim()?.takeUnless { it.isEmpty() }
 
-    /** WebView → CookieManager：`post` + `flush` 常与 `getCookie` 读回配套使用。*/
+    /** 刷新 CookieManager，便于随后读取 Cookie。 */
     fun postFlushCookiesSync() {
         val w = _binding?.webView
         val cm =
@@ -288,7 +288,7 @@ class CourseWebFragment : Fragment() {
         }
     }
 
-    /** 主页 `document.cookie`（无 HttpOnly），供与 [edu.uestc.eams.helper.data.web.WebViewCookieReader] 快照合并。 */
+    /** 读取当前页 document.cookie。 */
     fun readDocumentCookie(onResult: (String) -> Unit) {
         val w = _binding?.webView
         if (w == null) {

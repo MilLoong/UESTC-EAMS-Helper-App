@@ -111,7 +111,7 @@ fun ProfileTab(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("调试", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "按上方「提前 $reminderLeadMinutes 分钟」设定预览通知正文",
+                    "试发通知正文与正式提醒一致，格式为 [提前 $reminderLeadMinutes 分钟]",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     modifier = Modifier.padding(top = 6.dp),

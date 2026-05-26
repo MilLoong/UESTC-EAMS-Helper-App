@@ -8,12 +8,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 
-/** 等待 [CookieManager.removeAllCookies] 完成后再 [flush]，并清 [WebStorage]（会话类[缓存]常与 DOM 存储交织）。*/
+/** 清除 WebView Cookie 与 DOM 存储。 */
 object WebKitSessionCleaner {
 
-    /**
-     * 必须在 Main 线程调用 [CookieManager] 的典型实践；超时防 OEM 永远不回调。
-     */
+    /** 在主线程等待 removeAllCookies 完成。 */
     suspend fun removeCookiesAndDomStorage(timeoutMs: Long = 22_000L) {
         withContext(Dispatchers.Main) {
             withTimeout(timeoutMs) {

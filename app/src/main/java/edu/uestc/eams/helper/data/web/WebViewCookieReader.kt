@@ -121,7 +121,7 @@ object WebViewCookieReader {
             }
         }
 
-    /** `evaluateJavascript` 返回的 JSON 字符串外壳（带引号/转义）→ 纯文本。*/
+    /** 去掉 evaluateJavascript 返回值的 JSON 引号外壳。 */
     fun unwrapEvaluateJavascriptString(raw: String?): String {
         val t = raw?.trim().orEmpty()
         if (t.isEmpty() || t == "null") return ""
@@ -129,9 +129,7 @@ object WebViewCookieReader {
             .getOrElse { t.removeSurrounding("\"").replace("\\\"", "\"") }
     }
 
-    /**
-     * 顶栏 document.cookie：**不含 HttpOnly**，但在部分机型/Chromium 上 [CookieManager.getCookie] 滞后或拿不到时仍可补会话。
-     */
+    /** 从页面 document.cookie 解析 Cookie，不含 HttpOnly。 */
     fun snapshotFromDocumentCookie(header: String, pageUrl: String?): List<StoredCookie> {
         val u =
             pageUrl?.trim()?.takeIf { it.startsWith("http") }
@@ -146,7 +144,7 @@ object WebViewCookieReader {
         return parseCookiePairs(header.trim(), domain = hu.host, secure = hu.scheme == "https")
     }
 
-    /** [CookieManager] + [snapshotFromDocumentCookie] 去重合并（后者覆盖同名同 path 时需整表重排：后写覆盖前先写）。 */
+    /** 合并多份 Cookie 列表，同名同 path 以后者为准。 */
     fun mergeCookieLists(vararg parts: List<StoredCookie>): List<StoredCookie> {
         val m = LinkedHashMap<String, StoredCookie>()
         for (part in parts) {

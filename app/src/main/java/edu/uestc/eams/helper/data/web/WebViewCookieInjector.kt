@@ -5,16 +5,10 @@ import android.webkit.ValueCallback
 import edu.uestc.eams.helper.data.session.StoredCookie
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * OkHttp Cookie 快照 → [CookieManager]，供嵌入式 WebView 复用会话。
- * **`online.uestc.edu.cn` 域名**若在 [StoredCookie.domain] 中也会按 `https://online.uestc.edu.cn` 写入，一网通 SPA 备选入口需同源 Cookie。
- */
+/** 将 OkHttp Cookie 写入 CookieManager，供 WebView 复用会话。 */
 class WebViewCookieInjector {
 
-    /**
-     * [CookieManager.setCookie] 会将 Cookie **异步** 写入 Chromium 存储；若在回调完成前调用 [CookieManager.flush]，
-     * 随后立刻 [CookieManager.getCookie] 常为 **空**。此处等全部回调后再 [flush]。
-     */
+    /** 等待全部 setCookie 回调完成后再 flush。 */
     fun injectAll(cookies: List<StoredCookie>) {
         val cm = CookieManager.getInstance().apply { setAcceptCookie(true) }
         if (cookies.isEmpty()) {

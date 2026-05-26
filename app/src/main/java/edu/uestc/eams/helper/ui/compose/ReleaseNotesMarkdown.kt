@@ -14,7 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 
-/** GitHub Release 说明常用 Markdown 子集 → Compose 富文本。 */
+/** 将 Release 说明 Markdown 转为富文本。 */
 @Composable
 fun ReleaseNotesMarkdownText(
     markdown: String,

@@ -15,7 +15,7 @@ fun Cookie.toStored(): StoredCookie =
 
 object CookieExporter {
 
-    /** 去重：`domain + name + path`（对齐 OkHttp Cookie 等价键）。 */
+    /** 将 OkHttp Cookie 列表去重导出。 */
     fun fromOkHttp(all: List<Cookie>): List<StoredCookie> {
         val out = LinkedHashMap<String, StoredCookie>()
         all.forEach { c ->
