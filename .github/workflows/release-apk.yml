@@ -86,9 +86,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+        # 用 bash 调用，避免 Windows 提交的 gradlew 在 Linux 上无 +x 导致 Permission denied
+        run: bash ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Verify APK output
         run: |
