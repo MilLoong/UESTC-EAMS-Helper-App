@@ -15,6 +15,7 @@ class ReleaseNotesMarkdownTest {
                 subHeaderStyle = SpanStyleStub,
                 bodyStyle = SpanStyleStub,
                 linkStyle = SpanStyleStub,
+                codeStyle = SpanStyleStub,
             ).text
         assertTrue(text.contains("Title"))
         assertTrue(text.contains("Bold"))
@@ -22,6 +23,22 @@ class ReleaseNotesMarkdownTest {
         assertFalse(text.contains("##"))
         assertFalse(text.contains("**"))
         assertFalse(text.contains("[link]"))
+    }
+
+    @Test
+    fun build_renders_inline_code_without_backticks() {
+        val text =
+            buildReleaseNotesAnnotatedString(
+                markdown = "- 支持字段 `year` 与 `vaildWeeks`",
+                headerStyle = SpanStyleStub,
+                subHeaderStyle = SpanStyleStub,
+                bodyStyle = SpanStyleStub,
+                linkStyle = SpanStyleStub,
+                codeStyle = SpanStyleStub,
+            ).text
+        assertTrue(text.contains("year"))
+        assertTrue(text.contains("vaildWeeks"))
+        assertFalse(text.contains("`"))
     }
 
     private companion object {

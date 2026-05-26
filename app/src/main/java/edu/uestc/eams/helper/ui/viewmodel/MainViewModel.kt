@@ -62,7 +62,6 @@ data class WakeUpImportPrompt(
     val initialDate: LocalDate,
     val semesterOpenDay: LocalDate,
     val firstClassDay: LocalDate?,
-    val maxWeek: Int,
     val fromFile: Boolean,
 )
 
@@ -360,7 +359,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         loggedIn = false,
                         message =
                             if (it.courses.isEmpty()) {
-                                "请先登录，或在 Web 中 [导入会话] 后点 [刷新]，或顶栏 [导入] WakeUp HTML"
+                                "请先登录，或在 Web 中 [导入会话] 后点 [刷新]，或顶栏 [导入] 树维课表 HTML"
                             } else {
                                 "会话已失效，请重新登录或通过 Web [导入会话]"
                             },
@@ -534,7 +533,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _ui.update {
                             it.copy(
                                 contentLoading = false,
-                                message = e.message ?: "导入失败，请确认是 WakeUp 树维导出的 HTML",
+                                message = e.message ?: "导入失败，请确认是树维课表 HTML",
                             )
                         }
                         return@launch
@@ -555,7 +554,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             initialDate = initial,
                             semesterOpenDay = semesterOpen,
                             firstClassDay = firstClass,
-                            maxWeek = parsed.maxWeek,
                             fromFile = parsed.weekOneMonday != null,
                         ),
                 )
@@ -591,7 +589,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _ui.update {
                         it.copy(
                             contentLoading = false,
-                            message = e.message ?: "导入失败，请确认是 WakeUp 树维导出的 HTML",
+                            message = e.message ?: "导入失败，请确认是树维课表 HTML",
                         )
                     }
                 },

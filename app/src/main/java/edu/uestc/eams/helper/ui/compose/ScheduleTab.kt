@@ -92,7 +92,7 @@ fun ScheduleTab(
 
     if (courses.isEmpty() && timetableMeta == null) {
         EmptyHint(
-            "暂无课表\n登录或 Web [导入会话] 后点 [刷新]\n或顶栏 [导入] WakeUp 树维导出的 HTML",
+            "暂无课表\n登录或 Web [导入会话] 后点 [刷新]\n或顶栏 [导入] 树维课表 HTML",
             modifier,
         )
         return
