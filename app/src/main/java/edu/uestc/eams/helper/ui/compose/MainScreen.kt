@@ -212,9 +212,8 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (update.releaseNotes.isNotBlank()) {
-                        Text(
+                        ReleaseNotesMarkdownText(
                             update.releaseNotes,
-                            style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     } else {

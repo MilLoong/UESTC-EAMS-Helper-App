@@ -76,7 +76,7 @@ class AppUpdateChecker(
 
     companion object {
         private const val USER_AGENT = "UESTC-EAMS-Helper-App"
-        private const val MAX_NOTES_LEN = 600
+        private const val MAX_NOTES_LEN = 1500
 
         private fun defaultClient(): OkHttpClient =
             OkHttpClient.Builder()
