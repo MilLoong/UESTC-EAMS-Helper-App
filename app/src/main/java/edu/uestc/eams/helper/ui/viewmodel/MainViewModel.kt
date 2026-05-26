@@ -261,7 +261,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shiftTimetableWeek(delta: Int) {
         val meta = _ui.value.timetableMeta ?: return
-        loadTimetableWeek((meta.displayWeek + delta).coerceAtLeast(1))
+        selectTimetableWeek(meta.displayWeek + delta)
+    }
+
+    fun selectTimetableWeek(week: Int) {
+        loadTimetableWeek(week.coerceAtLeast(1))
     }
 
     fun goCurrentTimetableWeek() {

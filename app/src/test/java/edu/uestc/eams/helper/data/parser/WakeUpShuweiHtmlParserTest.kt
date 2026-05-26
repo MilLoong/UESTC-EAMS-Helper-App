@@ -34,6 +34,26 @@ class WakeUpShuweiHtmlParserTest {
     }
 
     @Test
+    fun parses_vaildWeeks_with_leading_padding_zero() {
+        val bits = "0" + "1".repeat(13)
+        val json =
+            """
+            {
+              "unitCount": 1,
+              "activities": [
+                [{"courseId":"1","courseName":"课A","vaildWeeks":"$bits"}],
+                [], [], [], [], [], [], []
+              ]
+            }
+            """.trimIndent()
+        val result = WakeUpShuweiHtmlParser.parse(json)
+        assertEquals(13, result.maxWeek)
+        val c = result.courses.single()
+        assertEquals("1-13", c.weeks)
+        assertTrue(CourseWeekFilter.isActiveInWeek(c.weeks, 1))
+    }
+
+    @Test
     fun merges_same_course_across_periods_with_different_teachers() {
         val json =
             """

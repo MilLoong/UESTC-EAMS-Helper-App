@@ -178,6 +178,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         modifier = Modifier.fillMaxSize(),
                         onPrevWeek = { viewModel.shiftTimetableWeek(-1) },
                         onNextWeek = { viewModel.shiftTimetableWeek(1) },
+                        onWeekSelected = { viewModel.selectTimetableWeek(it) },
                         onGoCurrentWeek = { viewModel.goCurrentTimetableWeek() },
                     )
                 1 -> ExamTab(state.exams, Modifier.fillMaxSize())

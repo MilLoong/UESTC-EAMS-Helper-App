@@ -2,8 +2,9 @@ package edu.uestc.eams.helper.ui.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,13 +28,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.ScrollState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,6 +53,7 @@ import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
+import edu.uestc.eams.helper.data.parser.WeekSpec
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
@@ -63,6 +73,7 @@ private val coursePalette =
 private val timeColumnWidth = 38.dp
 private val rowHeight = 50.dp
 private val dayHeaderHeight = 36.dp
+private const val TIMETABLE_PAGE_COUNT = 30
 
 @Composable
 fun ScheduleTab(
@@ -71,19 +82,12 @@ fun ScheduleTab(
     modifier: Modifier = Modifier,
     onPrevWeek: () -> Unit = {},
     onNextWeek: () -> Unit = {},
+    onWeekSelected: (Int) -> Unit = {},
     onGoCurrentWeek: () -> Unit = {},
 ) {
     val today = LocalDate.now()
     val currentWeek = timetableMeta?.currentWeek ?: 1
     val displayWeek = timetableMeta?.displayWeek ?: currentWeek
-    val weekMonday =
-        remember(displayWeek, currentWeek) {
-            TimetableWeekCalendar.mondayOfDisplayedWeek(displayWeek, currentWeek, today)
-        }
-    val visible =
-        remember(courses, displayWeek) {
-            AdjacentCourseMerge.merge(CourseWeekFilter.filterForWeek(courses, displayWeek))
-        }
 
     if (courses.isEmpty() && timetableMeta == null) {
         EmptyHint(
@@ -93,46 +97,60 @@ fun ScheduleTab(
         return
     }
 
-    val byDay = remember(visible) { visible.groupBy { it.weekday } }
-    val colorByKey =
-        remember(visible) {
-            val map = mutableMapOf<String, Long>()
-            visible.forEachIndexed { i, c ->
-                val key = c.courseId.ifBlank { c.courseName }
-                map.putIfAbsent(key, coursePalette[i % coursePalette.size])
-            }
-            map
+    val pageCount =
+        remember(courses) {
+            courses
+                .maxOfOrNull { WeekSpec.maxWeekNumber(it.weeks) }
+                ?.coerceIn(1, TIMETABLE_PAGE_COUNT)
+                ?: TIMETABLE_PAGE_COUNT
         }
-
-    val vScroll = rememberScrollState()
-    val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
-    val isCurrentWeek = displayWeek == currentWeek
+    val initialPage = (displayWeek - 1).coerceIn(0, pageCount - 1)
+    val pagerState =
+        rememberPagerState(
+            initialPage = initialPage,
+            pageCount = { pageCount },
+        )
+    val headerWeek by remember(pageCount) {
+        derivedStateOf {
+            (pagerState.currentPage + pagerState.currentPageOffsetFraction + 1f)
+                .roundToInt()
+                .coerceIn(1, pageCount)
+        }
+    }
+    val weekMonday =
+        remember(headerWeek, currentWeek) {
+            TimetableWeekCalendar.mondayOfDisplayedWeek(headerWeek, currentWeek, today)
+        }
+    val isCurrentWeek = headerWeek == currentWeek
     val weekRangeSubtitle =
         TimetableWeekCalendar.formatHeaderDate(weekMonday) +
             " - " +
             TimetableWeekCalendar.formatHeaderDate(weekMonday.plusDays(6))
+    var syncingPagerFromModel by remember { mutableStateOf(false) }
 
-    val density = LocalDensity.current
-    val swipeThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
+    LaunchedEffect(displayWeek) {
+        val target = (displayWeek - 1).coerceIn(0, pageCount - 1)
+        if (pagerState.currentPage == target) return@LaunchedEffect
+        syncingPagerFromModel = true
+        try {
+            pagerState.animateScrollToPage(target)
+        } finally {
+            syncingPagerFromModel = false
+        }
+    }
 
-    Column(
-        modifier
-            .fillMaxSize()
-            .pointerInput(onPrevWeek, onNextWeek, swipeThresholdPx) {
-                var dragTotal = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dragTotal = 0f },
-                    onHorizontalDrag = { _, delta -> dragTotal += delta },
-                    onDragEnd = {
-                        when {
-                            dragTotal > swipeThresholdPx -> onPrevWeek()
-                            dragTotal < -swipeThresholdPx -> onNextWeek()
-                        }
-                    },
-                    onDragCancel = { dragTotal = 0f },
-                )
-            },
-    ) {
+    LaunchedEffect(pagerState, displayWeek) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val week = page + 1
+                if (!syncingPagerFromModel && week != displayWeek) {
+                    onWeekSelected(week)
+                }
+            }
+    }
+
+    Column(modifier.fillMaxSize()) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -156,7 +174,7 @@ fun ScheduleTab(
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        "第${displayWeek}周",
+                        "第${headerWeek}周",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
                         maxLines = 1,
@@ -198,6 +216,52 @@ fun ScheduleTab(
             }
         }
         HorizontalDivider()
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f),
+            beyondViewportPageCount = 1,
+        ) { page ->
+            ScheduleWeekPage(
+                weekNumber = page + 1,
+                courses = courses,
+                currentWeek = currentWeek,
+                today = today,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleWeekPage(
+    weekNumber: Int,
+    courses: List<UestcCourse>,
+    currentWeek: Int,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
+    val weekMonday =
+        remember(weekNumber, currentWeek) {
+            TimetableWeekCalendar.mondayOfDisplayedWeek(weekNumber, currentWeek, today)
+        }
+    val visible =
+        remember(courses, weekNumber) {
+            AdjacentCourseMerge.merge(CourseWeekFilter.filterForWeek(courses, weekNumber))
+        }
+    val byDay = remember(visible) { visible.groupBy { it.weekday } }
+    val colorByKey =
+        remember(visible) {
+            val map = mutableMapOf<String, Long>()
+            visible.forEachIndexed { i, c ->
+                val key = c.courseId.ifBlank { c.courseName }
+                map.putIfAbsent(key, coursePalette[i % coursePalette.size])
+            }
+            map
+        }
+    val vScroll = remember(weekNumber) { ScrollState(0) }
+    val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
+
+    Column(modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
