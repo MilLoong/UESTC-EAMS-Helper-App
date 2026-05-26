@@ -2,19 +2,13 @@
 
 import java.util.Locale
 
-/**
- * 网关防爬占位页会在 HTML/JSON 里出现 `$_ts` 或字面上的 `\u0024_ts`。
- * **正常一网通 SPA**（体量约 12k）的脚本/内联配置里也会出现同一串，单凭[出现过]不可判为拦截壳。
- *
- * 与 Python：`warm_online_schedule_context` 能拿到大号 HTML 时仍应继续走 scheduleList；
- * `_online_schedule_shell_html_usable`、`schedule_list_page_probe_ok` 对 scheduleList **壳** 的判定在下面单独给出。
- */
+/** 判断响应是否为网关占位页，避免与正常一网通 SPA 混淆。 */
 internal object GatewayTsShellHeuristic {
 
     fun containsTsBootstrapMarker(body: String): Boolean =
         body.contains("${'$'}_ts") || body.contains("\\u0024_ts")
 
-    /** Python `_online_schedule_shell_html_usable`（URL 已为 scheduleList 域内页时调用）。*/
+    /** 判断 scheduleList 页 HTML 是否可用。 */
     fun onlineScheduleListShellUsable(html: String): Boolean {
         val tl = html.lowercase(Locale.ROOT)
         if (html.contains(ApiConstants.ONLINE_STRUTS_ONCE_PARAM)) return true
@@ -23,7 +17,7 @@ internal object GatewayTsShellHeuristic {
         return hasApp && "/page/assets/" in tl
     }
 
-    /** 大号门户壳（含 SPA 引导）的典型信号：有这些则即便带 ts 也**不**当占位壳。*/
+    /** 是否像正常一网通 SPA 引导页。 */
     fun looksLikeUeStcOnlineSpaBootstrap(body: String): Boolean =
         body.length >= 8192 ||
             body.containsScheduleOrPortalSignals()

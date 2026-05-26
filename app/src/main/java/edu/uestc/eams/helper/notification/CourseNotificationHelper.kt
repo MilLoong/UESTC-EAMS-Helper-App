@@ -98,7 +98,7 @@ object CourseNotificationHelper {
         val pool = courses.filter { it.courseName.isNotBlank() }
         if (pool.isEmpty()) return PreviewResult.NoCourses
         val sample = pool.random()
-        val room = sample.room.ifBlank { "（教室待定）" }
+        val room = sample.room.ifBlank { "[教室待定]" }
         val leadMinutes = CourseReminderPreferences(context).leadMinutes
         val sent =
             showClassReminder(
@@ -113,7 +113,7 @@ object CourseNotificationHelper {
     }
 
     private fun buildTitle(courseName: String, debug: Boolean): String {
-        val prefix = if (debug) "（调试）" else ""
+        val prefix = if (debug) "[调试] " else ""
         return "${prefix}📌 上课提醒：$courseName 即将开始！"
     }
 
@@ -123,18 +123,17 @@ object CourseNotificationHelper {
         startTime: String,
         debug: Boolean,
     ): String {
-        val loc = room.trim().ifEmpty { "（教室待定）" }
+        val loc = room.trim().ifEmpty { "[教室待定]" }
         val clock = startTime.trim()
         val timing =
             when {
                 debug && minutesUntil != null && minutesUntil > 0 -> {
-                    val countdown = "${minutesUntil} 分钟后开始"
-                    val suffix = "（调试预览，提前提醒设定）"
-                    if (clock.isNotEmpty()) "$countdown（$clock）$suffix" else "$countdown$suffix"
+                    val lead = "[提前 $minutesUntil 分钟]"
+                    if (clock.isNotEmpty()) "$lead $clock" else lead
                 }
                 minutesUntil != null && minutesUntil > 0 -> {
                     val countdown = "${minutesUntil} 分钟后开始"
-                    if (clock.isNotEmpty()) "$countdown（$clock）" else countdown
+                    if (clock.isNotEmpty()) "$countdown $clock" else countdown
                 }
                 minutesUntil == 0 -> if (clock.isNotEmpty()) "$clock 马上开始" else "马上开始"
                 clock.isNotEmpty() -> "$clock 即将开始"

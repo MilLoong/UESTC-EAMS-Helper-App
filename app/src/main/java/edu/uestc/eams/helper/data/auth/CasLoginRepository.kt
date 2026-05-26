@@ -77,7 +77,7 @@ class CasLoginRepository(
 
     companion object {
         const val TS_WAF_NOTICE =
-            "响应疑似网关/WAF（含 \u0024_ts 占位）。可对照 Python `test_eams_table.py`，或备选 WebView 登录一网通。"
+            "响应疑似网关拦截。请用右上角内置浏览器完成登录。"
         const val FALLBACK_ONLY_WEB =
             "可点 Web 打开移动教务网页登录，登录后 导入会话，再回主页点 顶栏刷新。"
 
@@ -232,7 +232,7 @@ class CasLoginRepository(
                 )
                 primeIdasFingerprintBeforeCredentialPost(loginRefererPlain)
 
-                /* Python `allow_redirects=False` 对等：避免 302 上 CASTGC 被后续一跳 Set-Cookie 冲掉、或跨域丢 Referer。*/
+                // 密码 POST 不自动跟跳，避免 CASTGC 被后续响应覆盖。
                 val credentialNoFollow =
                     client.newBuilder()
                         .followRedirects(false)
@@ -269,7 +269,7 @@ class CasLoginRepository(
                             "bodyHasLoginForm=${postedBody.lowercase().contains("casloginform")}",
                     )
 
-                    // 对齐 Python uestc-login：以 CASTGC 为准；勿在全页 HTML 里扫[验证码]等词（常为脚本文案误报）。
+                    // 以 CASTGC 判断登录成功，勿扫描整页 HTML 中的验证码文案。
                     if (!posted.httpStatusLikelyOk()) {
                         Forms.extractError(posted.body)?.takeIf(String::isNotBlank)?.let {
                             throw IOException("CAS：$it")
@@ -289,7 +289,7 @@ class CasLoginRepository(
                                     ?: throw IOException(
                                         "CAS 密码 POST 返回 ${posted.code} 但无跳转地址（正常应为 302 进入二次认证页）。",
                                     )
-                            traceCas("credential ${posted.code} → GET reAuthLoginView ${loc.take(200)}")
+                            traceCas("credential ${posted.code} GET reAuthLoginView ${loc.take(200)}")
                             credentialNoFollow.newCall(
                                 Request.Builder()
                                     .url(loc)
@@ -332,8 +332,7 @@ class CasLoginRepository(
                                 Forms.extractCasOnlineTicketCandidates(postedBody)
                             if (embeddedTickets.isNotEmpty()) {
                                 traceCas(
-                                    "CASTGC 仍未入账（credential 后）：正文扫到 ${embeddedTickets.size} " +
-                                        "条 uestc ticket 候选；GET 消费（对齐 Python body 内 ticket）…",
+                                    "CASTGC 仍未入账：正文含 ${embeddedTickets.size} 条 ticket，开始 GET 消费…",
                                 )
                                 for (ticketUrl in embeddedTickets) {
                                     consumeOneCasTicket(client, ticketUrl, loginUrlStr)
@@ -347,7 +346,7 @@ class CasLoginRepository(
                                 if (tip.isNotEmpty()) {
                                     val graphHint =
                                         if (tip.contains("图形")) {
-                                            "\n（提示：服务器文案含“图形”未必真有验证码，常见于风控/会话异常；可试仅用 WebView。）"
+                                            "\n[提示] 文案含“图形”未必是验证码，可试右上角 WebView。"
                                         } else {
                                             ""
                                         }
@@ -371,7 +370,7 @@ class CasLoginRepository(
                     }
                     logCastgcDetailSnapshot(jar, "before consumeTicket")
 
-                    // Python `_consume_cas_service_ticket_url`：仅消费 no-follow POST 的 Location（勿回溯 priorResponse 重放）。
+                    // 仅消费本次 POST 的 Location 中的 ticket。
                     consumeCasTicketIfNeededAlongPriorChain(client, credentialRsp, loginUrlStr)
                     logJarCookiesAfterCredentialPost(jar, credentialRsp.code)
                 }
@@ -405,7 +404,7 @@ class CasLoginRepository(
         leaf.header("Location")?.trim()?.takeIf { it.isNotEmpty() }?.let { loc ->
             val abs = leaf.request.url.resolve(loc)?.toString()?.trim().orEmpty()
             if (abs.contains("ticket=", ignoreCase = true)) {
-                traceCas("consumeTicket: Location ticket（no-follow 对等 Python）：${abs.take(220)}")
+                traceCas("consumeTicket: Location ticket ${abs.take(220)}")
                 consumeOneCasTicket(client, abs, casLoginUrl)
             }
         }
@@ -518,7 +517,7 @@ class CasLoginRepository(
             val isRedirect = rsp.code in 300..399
             if (!isRedirect && rsp.code >= 400) {
                 throw IOException(
-                    "一网通门户 ${ApiConstants.ONLINE_PAGE_URL} HTTP ${rsp.code} —— $FALLBACK_ONLY_WEB",
+                    "一网通门户 HTTP ${rsp.code}。$FALLBACK_ONLY_WEB",
                 )
             }
 
@@ -553,7 +552,7 @@ class CasLoginRepository(
         var pair =
             if (useCredentialLanding) {
                 traceCas(
-                    "smsIfNeeded: 直接使用 credential POST 着陆页 urlTrail=${landUrl.take(240)}…（对齐 Python `url_final`）",
+                    "smsIfNeeded: 使用 credential 着陆页 ${landUrl.take(240)}…",
                 )
                 landHtml to landUrl
             } else {
@@ -570,7 +569,7 @@ class CasLoginRepository(
 
         val pageUrlTrim = pair.second.trim().substringBefore("#")
         if (!Forms.needsIdasSmsOrMultifactorReauth(html, pageUrlTrim)) {
-            traceCas("smsIfNeeded: skip (正文与 URL 均未命中 Python 风格 MFA/reAuth)")
+            traceCas("smsIfNeeded: skip，未命中 MFA 页面")
             return
         }
 
@@ -590,7 +589,7 @@ class CasLoginRepository(
         coroutineContext.ensureActive()
         if (Forms.needsIdasSmsOrMultifactorReauth(afterHtml, afterUrl)) {
             throw IOException(
-                "二次认证后仍停留在 MFA 页面（对齐 Python：`bfp`/发码/order）。$FALLBACK_ONLY_WEB",
+                "二次认证后仍停留在验证页。$FALLBACK_ONLY_WEB",
             )
         }
     }
@@ -738,7 +737,7 @@ class CasLoginRepository(
                 add("answer2", "")
                 add("otpCode", "")
                 if (isSleep == "0") {
-                    add("skipTmpReAuth", "false") // [仅本次]与 Python `UESTC_REAUTH_TRUST_DEVICE` 默认值一致
+                    add("skipTmpReAuth", "false")
                 }
             }.build()
 
@@ -767,7 +766,7 @@ class CasLoginRepository(
             if (raw.trimStart().startsWith("<")) {
                 throw IOException("二次认证提交返回网页而非 JSON，会话可能已失效。$FALLBACK_ONLY_WEB")
             }
-            summarizeReAuthJsonFailure(raw)?.let { msg -> throw IOException("$msg —— $FALLBACK_ONLY_WEB") }
+            summarizeReAuthJsonFailure(raw)?.let { msg -> throw IOException("$msg $FALLBACK_ONLY_WEB") }
         }
 
         val jump =
@@ -939,7 +938,7 @@ class CasLoginRepository(
                 userMessage =
                     buildString {
                         append("$label 被重定向（HTTP ${rsp.code}）")
-                        if (loc.isNotBlank()) append(" → ${loc.take(100)}")
+                        if (loc.isNotBlank()) append(" loc=${loc.take(100)}")
                         append("。二次认证会话可能已失效，请关闭登录框后重新登录。")
                     },
             )
@@ -1003,7 +1002,7 @@ class CasLoginRepository(
                     buildString {
                         if (errCode.isNotEmpty()) append("[$errCode] ")
                         append(hint)
-                        if (data.isNotEmpty()) append(" → $data")
+                        if (data.isNotEmpty()) append(" data=$data")
                     },
             )
         }
@@ -1325,7 +1324,7 @@ private fun executionMissingDiag(loginUrlUsed: String, html: String): String {
             add("含execution字面=${h.contains("execution")}")
             add("网关壳_TS=${html.containsAntiBotTs()}")
         }.joinToString(", ")
-    return "[诊断] GET $loginUrlUsed → $parts。若为壳页或过短可先 WebView 登录一次；若为完整登录页却仍无表单，则需按 Idas 新版 HTML 调整解析。"
+    return "[诊断] GET $loginUrlUsed: $parts。可先 WebView 登录；若仍无登录表单，需更新解析规则。"
 }
 
 private fun String.containsAntiBotTs(): Boolean =

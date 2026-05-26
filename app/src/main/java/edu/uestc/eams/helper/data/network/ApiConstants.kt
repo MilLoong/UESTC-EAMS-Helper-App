@@ -105,7 +105,7 @@ object ApiConstants {
     fun buildOkHttp(cookieJar: InMemoryCookieJar): OkHttpClient =
         OkHttpClient.Builder()
             .cookieJar(cookieJar)
-            // 若声明 `Accept-Encoding: br` 却不挂 Brotli，`ResponseBody.string()` 会得到未解压二进制 → UI 乱码。
+            // 声明 br 时需 BrotliInterceptor，否则响应体无法解压。
             .addInterceptor(BrotliInterceptor)
             .connectTimeout(45, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)

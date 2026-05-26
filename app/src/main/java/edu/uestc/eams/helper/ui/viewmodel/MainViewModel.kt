@@ -554,7 +554,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (CourseNotificationHelper.showPreview(ctx, _ui.value.courses)) {
             CourseNotificationHelper.PreviewResult.Sent ->
                 _ui.update {
-                    it.copy(message = "已发送调试通知（按提前 $lead 分钟设定），请看通知栏")
+                    it.copy(message = "已发送调试通知 [提前 $lead 分钟]，请看通知栏")
                 }
             CourseNotificationHelper.PreviewResult.NoPermission ->
                 _ui.update { it.copy(message = "未获得通知权限，请在系统设置中允许通知") }
