@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,6 +100,7 @@ private val rowHeight = 50.dp
 private val dayHeaderHeight = 36.dp
 private const val TIMETABLE_PAGE_COUNT = 30
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleTab(
     courses: List<UestcCourse>,
@@ -123,6 +125,7 @@ fun ScheduleTab(
     val displayWeek = shellMeta.displayWeek
     val weekOneMonday = shellMeta.weekOneMondayDate()
     val showSetupHint = timetableMeta == null && courses.isEmpty()
+    var detailCourse by remember { mutableStateOf<UestcCourse?>(null) }
 
     // 固定 30 页可滑动周次，不按课程周次字段上限截断（否则仅排到第 16 周等就无法往后浏览）
     val pageCount = TIMETABLE_PAGE_COUNT
@@ -250,6 +253,7 @@ fun ScheduleTab(
                     currentWeek = currentWeek,
                     today = today,
                     weekOneMonday = weekOneMonday,
+                    onCourseClick = { detailCourse = it },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -262,6 +266,12 @@ fun ScheduleTab(
                 )
             }
         }
+        detailCourse?.let { course ->
+            CourseDetailBottomSheet(
+                course = course,
+                onDismiss = { detailCourse = null },
+            )
+        }
     }
 }
 
@@ -273,6 +283,7 @@ private fun ScheduleWeekPage(
     currentWeek: Int,
     today: LocalDate,
     weekOneMonday: LocalDate?,
+    onCourseClick: (UestcCourse) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val weekMonday =
@@ -335,6 +346,7 @@ private fun ScheduleWeekPage(
                             rowHeight = rowHeight,
                             gridHeight = gridHeight,
                             colorByKey = colorByKey,
+                            onCourseClick = onCourseClick,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -445,6 +457,7 @@ private fun DayColumn(
     rowHeight: Dp,
     gridHeight: Dp,
     colorByKey: Map<String, Long>,
+    onCourseClick: (UestcCourse) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -477,6 +490,7 @@ private fun DayColumn(
                 course = course,
                 periodSpan = span,
                 background = bg,
+                onClick = { onCourseClick(course) },
                 modifier =
                     Modifier
                         .offset(y = with(density) { topPx.toDp() })
@@ -488,10 +502,18 @@ private fun DayColumn(
 }
 
 @Composable
+private fun courseCardNameMaxLines(periodSpan: Int): Int =
+    (periodSpan * 2).coerceIn(2, 8)
+
+private fun courseCardRoomMaxLines(periodSpan: Int): Int =
+    (periodSpan + 1).coerceIn(2, 6)
+
+@Composable
 private fun CourseCard(
     course: UestcCourse,
     periodSpan: Int,
     background: Color,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val startTime = UestcPeriodTime.resolvedStartTime(course)
@@ -503,14 +525,15 @@ private fun CourseCard(
                 .padding(horizontal = 1.dp, vertical = 1.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(background)
+                .clickable(onClick = onClick)
                 .padding(horizontal = 2.dp, vertical = 2.dp),
     ) {
         Text(
             course.courseName,
             fontSize = 8.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = if (periodSpan <= 1) 2 else 3,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = courseCardNameMaxLines(periodSpan),
+            overflow = TextOverflow.Clip,
             color = Color.White,
             lineHeight = 9.sp,
         )
@@ -524,12 +547,13 @@ private fun CourseCard(
         }
         val loc = course.room.trim()
         if (loc.isNotEmpty()) {
+            val locText = if (loc.startsWith("@")) loc else "@$loc"
             Text(
-                loc,
+                locText,
                 fontSize = 7.sp,
                 lineHeight = 8.sp,
-                maxLines = if (periodSpan <= 1) 1 else 2,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = courseCardRoomMaxLines(periodSpan),
+                overflow = TextOverflow.Clip,
                 color = Color.White.copy(alpha = 0.88f),
                 modifier = Modifier.padding(top = 1.dp),
             )
