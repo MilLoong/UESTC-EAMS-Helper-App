@@ -20,6 +20,7 @@ import edu.uestc.eams.helper.domain.model.GradesSummary
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -210,18 +211,25 @@ class UestcRepository(
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
     fun isOfflineImported(): Boolean = cache.isOfflineImported()
 
-    /** 从 WakeUp 导出的 HTML 导入课表并覆盖本地缓存。 */
-    suspend fun importWakeUpTimetableFile(fileText: String): Result<Int> =
+    /** 从 WakeUp 导出的 HTML 导入课表并覆盖本地缓存；[weekOneMonday] 为第 1 教学周周一。 */
+    suspend fun importWakeUpTimetableFile(
+        fileText: String,
+        weekOneMonday: LocalDate,
+    ): Result<Int> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val parsed = WakeUpShuweiHtmlParser.parse(fileText)
                 val currentWeek =
-                    TeachingWeekEstimator.estimate(parsed.year, parsed.maxWeek)
+                    TeachingWeekEstimator.estimateFromWeekOneMonday(
+                        weekOneMonday,
+                        parsed.maxWeek,
+                    )
                 val meta =
                     TimetableMeta(
                         semesterCode = AcademicCache.IMPORT_SEMESTER,
                         currentWeek = currentWeek,
-                        displayWeek = currentWeek,
+                        displayWeek = currentWeek.coerceIn(1, parsed.maxWeek),
+                        weekOneMonday = weekOneMonday.toString(),
                     )
                 cache.saveCourses(parsed.courses)
                 cache.saveTimetableMeta(meta)

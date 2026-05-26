@@ -2,7 +2,7 @@ package edu.uestc.eams.helper.data.parser
 
 import edu.uestc.eams.helper.domain.model.UestcCourse
 
-/** 合并同一课程在相邻节次上的记录，用于树维导入与课表展示。 */
+/** 合并同一课程在相邻或重叠节次上的记录，用于树维导入与课表展示。 */
 object AdjacentCourseMerge {
 
     fun merge(courses: List<UestcCourse>): List<UestcCourse> {
@@ -21,7 +21,8 @@ object AdjacentCourseMerge {
             if (prev != null && canMerge(prev, c)) {
                 cur =
                     prev.copy(
-                        endPeriod = c.endPeriod,
+                        period = minOf(prev.period, c.period),
+                        endPeriod = maxOf(prev.endPeriod, c.endPeriod),
                         endTime = c.endTime.ifBlank { prev.endTime },
                         teacher = joinDistinct(prev.teacher, c.teacher),
                         room = joinDistinct(prev.room, c.room),
@@ -37,9 +38,9 @@ object AdjacentCourseMerge {
 
     private fun canMerge(a: UestcCourse, b: UestcCourse): Boolean =
         a.weekday == b.weekday &&
-            b.period == a.endPeriod + 1 &&
             sameCourse(a, b) &&
-            a.weeks == b.weeks
+            a.weeks == b.weeks &&
+            b.period <= a.endPeriod + 1
 
     private fun sameCourse(a: UestcCourse, b: UestcCourse): Boolean {
         if (a.courseId.isNotBlank() && b.courseId.isNotBlank()) {

@@ -202,6 +202,15 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
         }
     }
 
+    state.wakeUpImportPrompt?.let { prompt ->
+        WakeUpImportDialog(
+            prompt = prompt,
+            loading = state.contentLoading,
+            onDismiss = { viewModel.dismissWakeUpImport() },
+            onConfirm = { viewModel.confirmWakeUpImport(it) },
+        )
+    }
+
     state.updatePrompt?.let { update ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissUpdatePrompt() },

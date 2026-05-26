@@ -1,5 +1,6 @@
 package edu.uestc.eams.helper.data.parser
 
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,6 +52,65 @@ class WakeUpShuweiHtmlParserTest {
         val c = result.courses.single()
         assertEquals("1-13", c.weeks)
         assertTrue(CourseWeekFilter.isActiveInWeek(c.weeks, 1))
+    }
+
+    @Test
+    fun week_one_monday_null_when_only_year() {
+        val json =
+            """
+            {
+              "unitCount": 1,
+              "year": 2026,
+              "activities": [
+                [{"courseId":"1","courseName":"课A","vaildWeeks":"11"}],
+                [], [], [], [], [], []
+              ]
+            }
+            """.trimIndent()
+        val result = WakeUpShuweiHtmlParser.parse(json)
+        assertEquals(null, result.weekOneMonday)
+        assertEquals(LocalDate.of(2026, 3, 2), WakeUpShuweiHtmlParser.suggestWeekOneMonday(2026))
+    }
+
+    @Test
+    fun suggest_first_class_day_in_week_one() {
+        val json =
+            """
+            {
+              "unitCount": 2,
+              "year": 2026,
+              "activities": [
+                [], [], [{"courseId":"1","courseName":"课A","vaildWeeks":"11"}],
+                [], [], [], [],
+                [], [], [], [], [], [], []
+              ]
+            }
+            """.trimIndent()
+        val result = WakeUpShuweiHtmlParser.parse(json)
+        assertEquals(LocalDate.of(2026, 3, 3), WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(result.courses, 2026))
+    }
+
+    @Test
+    fun uses_startUnit_endUnit_for_spanning_periods() {
+        val json =
+            """
+            {
+              "unitCount": 11,
+              "year": 2026,
+              "month": 3,
+              "day": 2,
+              "activities": [
+                [], [], [], [], [], [], [], [], [],
+                [{"courseId":"57815","courseName":"操作系统","teacherName":"甲","roomName":"A101","vaildWeeks":"111","startUnit":9,"endUnit":11}],
+                [], [], [], [], [], [], [], [], [], [], []
+              ]
+            }
+            """.trimIndent()
+        val result = WakeUpShuweiHtmlParser.parse(json)
+        assertEquals(LocalDate.of(2026, 3, 2), result.weekOneMonday)
+        val c = result.courses.single { it.courseName == "操作系统" }
+        assertEquals(9, c.period)
+        assertEquals(11, c.endPeriod)
     }
 
     @Test

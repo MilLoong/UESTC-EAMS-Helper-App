@@ -5,6 +5,9 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.domain.model.UestcCourse
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /** 解析 WakeUp 树维教务导出的课表 HTML/JSON。 */
 object WakeUpShuweiHtmlParser {
@@ -13,6 +16,7 @@ object WakeUpShuweiHtmlParser {
         val courses: List<UestcCourse>,
         val maxWeek: Int,
         val year: Int?,
+        val weekOneMonday: LocalDate?,
     )
 
     fun parse(fileText: String): ParseResult {
@@ -24,20 +28,20 @@ object WakeUpShuweiHtmlParser {
         val activities =
             root.getAsJsonArray("activities")
                 ?: throw IllegalArgumentException("缺少 activities 字段")
-        val year = root.get("year")?.takeIf { it.isJsonPrimitive }?.asInt
+        val year = root.intField("year")
 
         val raw = mutableListOf<UestcCourse>()
         for (i in 0 until activities.size()) {
             val cell = activities.get(i)
             if (!cell.isJsonArray) continue
             val weekday = i / unitCount + 1
-            val period = i % unitCount + 1
-            if (weekday !in 1..7 || period !in 1..unitCount) continue
+            val gridPeriod = i % unitCount + 1
+            if (weekday !in 1..7 || gridPeriod !in 1..unitCount) continue
             val arr = cell.asJsonArray
             for (j in 0 until arr.size()) {
                 val obj = arr.get(j)
                 if (!obj.isJsonObject) continue
-                raw += activityToCourse(obj.asJsonObject, weekday, period)
+                raw += activityToCourse(obj.asJsonObject, weekday, gridPeriod)
             }
         }
 
@@ -45,7 +49,71 @@ object WakeUpShuweiHtmlParser {
         val maxWeek =
             merged.maxOfOrNull { WeekSpec.maxWeekNumber(it.weeks) }
                 ?.coerceAtLeast(1) ?: 1
-        return ParseResult(merged, maxWeek, year)
+        val weekOneMonday = parseWeekOneMonday(root, year)
+        return ParseResult(merged, maxWeek, year, weekOneMonday)
+    }
+
+    private fun parseWeekOneMonday(root: JsonObject, year: Int?): LocalDate? {
+        parseDateText(root.string("beginDate"))?.let { return it }
+        parseDateText(root.string("startDate"))?.let { return it }
+        parseDateText(root.string("firstDate"))?.let { return it }
+        val y = year ?: root.intField("year") ?: return null
+        val month =
+            root.intField("month")
+                ?: root.intField("beginMonth")
+                ?: root.intField("startMonth")
+        val day =
+            root.intField("day")
+                ?: root.intField("beginDay")
+                ?: root.intField("startDay")
+        if (month != null && day != null) {
+            val begin =
+                runCatching { LocalDate.of(y, month, day) }.getOrNull()
+                    ?: return suggestWeekOneMonday(y)
+            return begin.with(DayOfWeek.MONDAY)
+        }
+        return null
+    }
+
+    /** 导入对话框默认：春季 3/2、秋季 9/1 所在周的周一。 */
+    fun suggestWeekOneMonday(year: Int?): LocalDate {
+        val y = year ?: LocalDate.now().year
+        val anchor =
+            if (LocalDate.now().monthValue >= 9) {
+                LocalDate.of(y, 9, 1)
+            } else {
+                LocalDate.of(y, 3, 2)
+            }
+        return anchor.with(DayOfWeek.MONDAY)
+    }
+
+    /** 第 1 教学周内最早有课的一天，用于导入时快捷填入。 */
+    fun suggestFirstClassDayInWeekOne(
+        courses: List<UestcCourse>,
+        year: Int?,
+    ): LocalDate? {
+        val week1 = CourseWeekFilter.filterForWeek(courses, 1)
+        if (week1.isEmpty()) return null
+        val monday = suggestWeekOneMonday(year)
+        val minWeekday = week1.minOf { it.weekday }
+        return monday.plusDays((minWeekday - 1).toLong())
+    }
+
+    private fun parseDateText(text: String): LocalDate? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        val patterns =
+            listOf(
+                DateTimeFormatter.ISO_LOCAL_DATE,
+                DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+                DateTimeFormatter.ofPattern("yyyy/M/d"),
+                DateTimeFormatter.ofPattern("yyyy/M/dd"),
+            )
+        for (fmt in patterns) {
+            val d = runCatching { LocalDate.parse(t, fmt) }.getOrNull()
+            if (d != null) return d.with(DayOfWeek.MONDAY)
+        }
+        return null
     }
 
     private fun extractJsonPayload(text: String): String {
@@ -59,8 +127,8 @@ object WakeUpShuweiHtmlParser {
     }
 
     private fun resolveUnitCount(root: JsonObject): Int {
-        root.get("unitCount")?.asInt?.takeIf { it in 1..20 }?.let { return it }
-        val total = root.get("unitCounts")?.asInt
+        root.intField("unitCount")?.takeIf { it in 1..20 }?.let { return it }
+        val total = root.intField("unitCounts")
         if (total != null && total >= 7) {
             val perDay = total / 7
             if (perDay in 1..20) return perDay
@@ -71,21 +139,31 @@ object WakeUpShuweiHtmlParser {
     private fun activityToCourse(
         obj: JsonObject,
         weekday: Int,
-        period: Int,
+        gridPeriod: Int,
     ): UestcCourse {
         val name = obj.string("courseName")
         if (name.isBlank()) throw IllegalArgumentException("课程名为空")
         val bits = obj.string("vaildWeeks").ifBlank { obj.string("validWeeks") }
         val weeks = ValidWeeksBinary.toWeekSpec(bits)
+        val startUnit =
+            obj.intField("startUnit")
+                ?: obj.intField("startunit")
+                ?: gridPeriod
+        val endUnit =
+            obj.intField("endUnit")
+                ?: obj.intField("endunit")
+                ?: startUnit
+        val period = startUnit.coerceAtLeast(1)
+        val endPeriod = maxOf(startUnit, endUnit).coerceAtLeast(period)
         val startSlot = UestcPeriodTime.slots.getOrNull(period - 1)
-        val endSlot = UestcPeriodTime.slots.getOrNull(period - 1)
+        val endSlot = UestcPeriodTime.slots.getOrNull(endPeriod - 1)
         return UestcCourse(
             courseName = name,
             teacher = obj.string("teacherName"),
             room = obj.string("roomName"),
             weekday = weekday,
             period = period,
-            endPeriod = period,
+            endPeriod = endPeriod,
             weeks = weeks,
             courseId = obj.string("courseId"),
             startTime = startSlot?.start.orEmpty(),
@@ -95,4 +173,14 @@ object WakeUpShuweiHtmlParser {
 
     private fun JsonObject.string(key: String): String =
         get(key)?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+
+    private fun JsonObject.intField(vararg keys: String): Int? {
+        for (key in keys) {
+            val el = get(key) ?: continue
+            if (!el.isJsonPrimitive) continue
+            val n = el.asString.trim().toIntOrNull() ?: el.asInt
+            if (n > 0) return n
+        }
+        return null
+    }
 }
