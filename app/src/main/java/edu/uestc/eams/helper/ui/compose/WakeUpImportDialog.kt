@@ -55,7 +55,7 @@ fun WakeUpImportDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    stringResource(R.string.wakeup_import_message, prompt.maxWeek),
+                    stringResource(R.string.wakeup_import_message),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

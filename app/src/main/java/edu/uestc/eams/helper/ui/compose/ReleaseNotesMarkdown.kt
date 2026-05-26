@@ -10,6 +10,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -21,9 +22,9 @@ fun ReleaseNotesMarkdownText(
     modifier: Modifier = Modifier,
 ) {
     val typography = MaterialTheme.typography
-    val primary = MaterialTheme.colorScheme.primary
+    val colors = MaterialTheme.colorScheme
     val annotated =
-        remember(markdown, typography, primary) {
+        remember(markdown, typography, colors) {
             buildReleaseNotesAnnotatedString(
                 markdown = markdown,
                 headerStyle = SpanStyle(
@@ -37,8 +38,14 @@ fun ReleaseNotesMarkdownText(
                 bodyStyle = SpanStyle(fontSize = typography.bodySmall.fontSize),
                 linkStyle =
                     SpanStyle(
-                        color = primary,
+                        color = colors.primary,
                         fontSize = typography.bodySmall.fontSize,
+                    ),
+                codeStyle =
+                    SpanStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = typography.bodySmall.fontSize,
+                        background = colors.surfaceContainerHighest,
                     ),
             )
         }
@@ -51,6 +58,7 @@ internal fun buildReleaseNotesAnnotatedString(
     subHeaderStyle: SpanStyle,
     bodyStyle: SpanStyle,
     linkStyle: SpanStyle,
+    codeStyle: SpanStyle,
 ): AnnotatedString =
     buildAnnotatedString {
         val lines = markdown.lines()
@@ -66,20 +74,20 @@ internal fun buildReleaseNotesAnnotatedString(
             when {
                 line.startsWith("### ") ->
                     withStyle(subHeaderStyle) {
-                        appendInlineMarkdown(line.removePrefix("### "), bodyStyle, linkStyle)
+                        appendInlineMarkdown(line.removePrefix("### "), bodyStyle, linkStyle, codeStyle)
                     }
                 line.startsWith("## ") ->
                     withStyle(headerStyle) {
-                        appendInlineMarkdown(line.removePrefix("## "), bodyStyle, linkStyle)
+                        appendInlineMarkdown(line.removePrefix("## "), bodyStyle, linkStyle, codeStyle)
                     }
                 line.startsWith("- ") ->
                     withStyle(bodyStyle) {
                         append("• ")
-                        appendInlineMarkdown(line.removePrefix("- "), bodyStyle, linkStyle)
+                        appendInlineMarkdown(line.removePrefix("- "), bodyStyle, linkStyle, codeStyle)
                     }
                 else ->
                     withStyle(bodyStyle) {
-                        appendInlineMarkdown(line, bodyStyle, linkStyle)
+                        appendInlineMarkdown(line, bodyStyle, linkStyle, codeStyle)
                     }
             }
         }
@@ -87,18 +95,21 @@ internal fun buildReleaseNotesAnnotatedString(
 
 private val linkRegex = Regex("""\[([^\]]+)]\(([^)]+)\)""")
 private val boldRegex = Regex("""\*\*([^*]+)\*\*""")
+private val codeRegex = Regex("""`([^`]+)`""")
 
 private fun AnnotatedString.Builder.appendInlineMarkdown(
     text: String,
     bodyStyle: SpanStyle,
     linkStyle: SpanStyle,
+    codeStyle: SpanStyle,
 ) {
     var pos = 0
     while (pos < text.length) {
         val link = linkRegex.find(text, pos)
         val bold = boldRegex.find(text, pos)
+        val code = codeRegex.find(text, pos)
         val next =
-            listOfNotNull(link, bold).minByOrNull { it.range.first }
+            listOfNotNull(link, bold, code).minByOrNull { it.range.first }
                 ?: run {
                     append(text.substring(pos))
                     break
@@ -106,8 +117,8 @@ private fun AnnotatedString.Builder.appendInlineMarkdown(
         if (next.range.first > pos) {
             append(text.substring(pos, next.range.first))
         }
-        when (next) {
-            link ->
+        when {
+            next == link ->
                 withLink(
                     LinkAnnotation.Url(
                         next.groupValues[2],
@@ -116,8 +127,12 @@ private fun AnnotatedString.Builder.appendInlineMarkdown(
                 ) {
                     append(next.groupValues[1])
                 }
-            else ->
+            next == bold ->
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = bodyStyle.fontSize)) {
+                    append(next.groupValues[1])
+                }
+            else ->
+                withStyle(codeStyle) {
                     append(next.groupValues[1])
                 }
         }
