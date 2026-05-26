@@ -11,11 +11,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * 将 OkHttp Jar 快照以 JSON 明文落在 [SharedPreferences]（仅供本机复用会话，不构成安全边界）。
- *
- * WebView [读取页面 Cookie]合并进 Jar 后也应调用 [persistFromJar]，与 OkHttp 登录路径一致。
- */
+/** 持久化 OkHttp Cookie，供下次启动恢复会话。 */
 class SessionCookieStorage(
     private val prefs: SharedPreferences,
 ) {
@@ -24,7 +20,6 @@ class SessionCookieStorage(
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE),
     )
 
-    /** 快照落盘。使用 [commit]，避免紧接着杀进程时被 [apply] 异步丢写入。*/
     fun persistFromJar(jar: InMemoryCookieJar) {
         prefs
             .edit()
@@ -39,13 +34,9 @@ class SessionCookieStorage(
         jar.mergeFromStored(list)
     }
 
-    /**
-     * 清空 Jar 并 **同步**删除 prefs 快照（须 [commit]，否则易被当成[清空无效、下次照旧读缓存]）。
-     * 应用内 WebView / [android.webkit.CookieManager] 需由界面层另外 [android.webkit.CookieManager.removeAllCookies]。
-     */
+    /** 清空内存 Jar 与本地 Cookie 快照。 */
     fun clearJarAndPersistence(jar: InMemoryCookieJar): Boolean {
         jar.clearAll()
-        // 本文件专用 prefs：整库清空避免残留键；须与 [PREF_NAME] 独享一致。
         return prefs.edit().clear().commit()
     }
 
@@ -99,9 +90,7 @@ class SessionCookieStorage(
         private const val PREF_NAME = "uestc_okhttp_cookie_snapshot_v1"
         private const val KEY_JSON = "cookies_json"
 
-        /**
-         * 一网通日程前：**仅 idas CASTGC≠已在 online 门户落盘**。多探针 URL（/page vs /page/）+ Snapshot 兜底，减少误报。
-         */
+        /** 判断是否已有可用于一网通门户的 Cookie。 */
         fun hasCookiesForOnline(jar: InMemoryCookieJar): Boolean {
             val probes = onlineProbeHttpUrls()
             if (probes.any { jar.loadForRequest(it).isNotEmpty() }) return true

@@ -5,9 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import edu.uestc.eams.helper.EamsHelperApp
 
-/**
- * 每天自动拉取当前教学周课表并写入本地缓存（需有效登录会话）。
- */
+/** 每日后台同步当前教学周课表。 */
 class TimetableSyncWorker(
     context: Context,
     params: WorkerParameters,

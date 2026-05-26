@@ -10,7 +10,7 @@ import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UserProfile
 import java.time.LocalDate
 
-/** 课表、成绩、考试的本地缓存（供界面与后台任务读取）。 */
+/** 课表、成绩、考试的本地缓存。 */
 class AcademicCache(context: Context) {
 
     private val prefs = context.getSharedPreferences("academic_cache", Context.MODE_PRIVATE)
@@ -50,7 +50,7 @@ class AcademicCache(context: Context) {
         markWeekTimetableSyncedToday(semesterCode, week)
     }
 
-    /** 本学期该教学周是否已在今天成功拉取过。 */
+    /** 该教学周今天是否已同步过。 */
     fun wasWeekTimetableSyncedToday(semesterCode: String, week: Int): Boolean {
         val key = syncKey(semesterCode, week)
         return prefs.getString(KEY_WEEK_SYNC_KEY, null) == key &&
@@ -114,7 +114,14 @@ class AcademicCache(context: Context) {
         prefs.edit().remove(KEY_PROFILE).apply()
     }
 
+    fun setOfflineImported(imported: Boolean) {
+        prefs.edit().putBoolean(KEY_OFFLINE_IMPORTED, imported).apply()
+    }
+
+    fun isOfflineImported(): Boolean = prefs.getBoolean(KEY_OFFLINE_IMPORTED, false)
+
     companion object {
+        const val IMPORT_SEMESTER = "wakeup-import"
         private const val KEY_COURSES = "courses"
         private const val KEY_WEEK_COURSES = "week_courses_by_week"
         private const val KEY_WEEK_CACHE_SEMESTER = "week_courses_semester"
@@ -124,5 +131,6 @@ class AcademicCache(context: Context) {
         private const val KEY_GRADES = "grades"
         private const val KEY_EXAMS = "exams"
         private const val KEY_PROFILE = "user_profile"
+        private const val KEY_OFFLINE_IMPORTED = "offline_wakeup_import"
     }
 }

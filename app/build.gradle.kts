@@ -15,8 +15,8 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "2.2"
+        versionCode = 11
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -57,6 +57,23 @@ afterEvaluate {
     ).forEach { taskName ->
         tasks.findByName(taskName)?.let { task ->
             task.enabled = false
+        }
+    }
+
+    tasks.named("assembleDebug") {
+        doLast {
+            val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
+            if (!apkDir.isDirectory) return@doLast
+            val source =
+                apkDir.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+                    ?.maxByOrNull { it.lastModified() }
+                    ?: return@doLast
+            val dest = apkDir.resolve("成电教务助手.apk")
+            if (source.absolutePath != dest.absolutePath) {
+                source.copyTo(dest, overwrite = true)
+                source.delete()
+            }
         }
     }
 }

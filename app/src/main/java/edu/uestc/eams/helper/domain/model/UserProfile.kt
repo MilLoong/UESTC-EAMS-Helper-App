@@ -1,6 +1,6 @@
 package edu.uestc.eams.helper.domain.model
 
-/** 登录后从 JWT / `blade-user/appInfo` 汇总的展示用资料（不含密码）。 */
+/** 登录用户展示资料。 */
 data class UserProfile(
     val studentId: String,
     val displayName: String? = null,

@@ -2,7 +2,7 @@ package edu.uestc.eams.helper.data.parser
 
 import edu.uestc.eams.helper.domain.model.UestcCourse
 
-/** 判断课程在周次字符串（如 `1-16`、`1-5,7-16`、`13`）中是否上课。 */
+/** 判断课程在指定教学周是否上课。 */
 object CourseWeekFilter {
 
     fun isActiveInWeek(weekSpec: String, week: Int): Boolean {

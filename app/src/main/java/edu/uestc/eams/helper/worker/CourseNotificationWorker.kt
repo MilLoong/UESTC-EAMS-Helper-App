@@ -5,12 +5,11 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import edu.uestc.eams.helper.data.local.AcademicCache
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
+import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
 import java.time.LocalDate
 
-/**
- * 每 15 分钟检查本地课表：若距下一节课开始约 20 分钟内则发通知。
- */
+/** 定时检查课表并发送上课提醒。 */
 class CourseNotificationWorker(
     context: Context,
     params: WorkerParameters,
@@ -20,6 +19,7 @@ class CourseNotificationWorker(
         val courses = AcademicCache(applicationContext).loadCourses()
         if (courses.isEmpty()) return Result.success()
 
+        val leadSec = CourseReminderPreferences(applicationContext).leadSeconds
         val nowSec = System.currentTimeMillis() / 1000
         val anchor = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
         val todayDow = LocalDate.now().dayOfWeek.value
@@ -30,7 +30,7 @@ class CourseNotificationWorker(
             if (c.weekday != todayDow) continue
             val start = UestcPeriodTime.startEpochSec(c, anchor)
             val delta = start - nowSec
-            if (delta in 1..TWENTY_MIN_SEC && delta < bestDelta) {
+            if (delta in 1..leadSec && delta < bestDelta) {
                 bestDelta = delta
                 bestCourse = c
             }
@@ -51,7 +51,6 @@ class CourseNotificationWorker(
 
     companion object {
         const val UNIQUE_NAME = "course_notification_worker"
-        private const val TWENTY_MIN_SEC = 20 * 60
         const val EXTRA_OPEN_TAB = "open_tab"
     }
 }

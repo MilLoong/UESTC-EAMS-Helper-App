@@ -1,9 +1,15 @@
 package edu.uestc.eams.helper.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.EamsHelperApp
+import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
+import edu.uestc.eams.helper.data.update.AppUpdateChecker
+import edu.uestc.eams.helper.data.update.UpdateReminderStorage
 import edu.uestc.eams.helper.data.auth.CasLoginRepository
 import edu.uestc.eams.helper.data.auth.ReauthSmsSendOutcome
 import edu.uestc.eams.helper.data.auth.LoginUserMessages
@@ -20,13 +26,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 data class MainUiState(
-    /** 登录或刷新数据时显示全屏加载；会话探测、点「稍后」不占用。 */
     val contentLoading: Boolean = false,
     val message: String? = null,
     val loggedIn: Boolean = false,
@@ -37,20 +44,32 @@ data class MainUiState(
     val grades: List<GradeItem> = emptyList(),
     val showLogin: Boolean = false,
     val loginDeferred: Boolean = false,
-    /** 登录弹窗内状态文案（含验证码已发送、失败原因）。 */
     val loginStatus: String? = null,
-    /** 二次认证：已发码，等待用户提交短信验证码。 */
     val awaitingSms: Boolean = false,
-    /** 距可再次「重新发送验证码」的剩余秒数；0 表示可点。 */
     val smsResendSecondsLeft: Int = 0,
     val userProfile: UserProfile? = null,
+    val updatePrompt: UpdatePrompt? = null,
+    val reminderLeadMinutes: Int = CourseReminderPreferences.DEFAULT_LEAD_MINUTES,
+)
+
+data class UpdatePrompt(
+    val releaseTag: String,
+    val versionLabel: String,
+    val releaseNotes: String,
+    val downloadUrl: String,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as EamsHelperApp
     private val repo = app.uestcRepository
-    private val _ui = MutableStateFlow(MainUiState())
+    private val updateChecker = AppUpdateChecker()
+    private val updateStorage = UpdateReminderStorage(application)
+    private val reminderPrefs = CourseReminderPreferences(application)
+    private val _ui =
+        MutableStateFlow(
+            MainUiState(reminderLeadMinutes = CourseReminderPreferences(application).leadMinutes),
+        )
     val ui: StateFlow<MainUiState> = _ui.asStateFlow()
 
     private val smsContinuation = AtomicReference<CancellableContinuation<String>?>(null)
@@ -75,6 +94,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _ui.update { it.copy(userProfile = p) }
                     }
                 }
+            }
+        }
+        viewModelScope.launch { checkAppUpdate(force = false) }
+    }
+
+    fun dismissUpdatePrompt() {
+        val tag = _ui.value.updatePrompt?.releaseTag ?: return
+        updateStorage.dismiss(tag)
+        _ui.update { it.copy(updatePrompt = null) }
+    }
+
+    fun clearUpdatePrompt() {
+        _ui.update { it.copy(updatePrompt = null) }
+    }
+
+    fun checkAppUpdate(force: Boolean = false) {
+        viewModelScope.launch {
+            if (!force && !updateStorage.shouldCheckNow()) return@launch
+            if (!force) updateStorage.markCheckedNow()
+            val info = updateChecker.fetchLatestIfNewer(BuildConfig.VERSION_NAME)
+            if (info == null) {
+                if (force) {
+                    _ui.update {
+                        it.copy(message = "当前已是最新版本（${BuildConfig.VERSION_NAME}）")
+                    }
+                }
+                return@launch
+            }
+            if (!force && updateStorage.isDismissed(info.releaseTag)) return@launch
+            _ui.update {
+                it.copy(
+                    updatePrompt =
+                        UpdatePrompt(
+                            releaseTag = info.releaseTag,
+                            versionLabel = info.versionName,
+                            releaseNotes = info.releaseNotes,
+                            downloadUrl = info.downloadUrl,
+                        ),
+                )
             }
         }
     }
@@ -213,6 +271,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadTimetableWeek(week: Int, forceNetwork: Boolean = false) {
         viewModelScope.launch {
+            if (!forceNetwork && repo.switchTimetableWeekLocal(week)) {
+                reloadFromCache()
+                return@launch
+            }
             val semester = _ui.value.timetableMeta?.semesterCode
             val useCache =
                 !forceNetwork &&
@@ -238,7 +300,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 从 Web 返回或切回前台时，根据 Cookie 会话更新登录状态。 */
     fun onHostResume() {
         viewModelScope.launch {
             val ok = repo.probeSession()
@@ -262,17 +323,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 顶栏刷新：按当前 Tab 只拉对应接口（课表仅强制更新正在查看的那一周）。 */
     fun refreshAll() {
         viewModelScope.launch {
             val hasSession = repo.probeSession()
+            val tab = _ui.value.selectedTab
             if (!hasSession) {
+                if (repo.isOfflineImported() && tab == 0) {
+                    _ui.update {
+                        it.copy(
+                            loggedIn = false,
+                            message = "当前为导入课表，请用顶栏 [导入] 更新，或登录后 [刷新] 从教务拉取",
+                        )
+                    }
+                    return@launch
+                }
                 _ui.update {
                     it.copy(
                         loggedIn = false,
                         message =
                             if (it.courses.isEmpty()) {
-                                "请先登录，或在 Web 中 [导入会话] 后点 [刷新]"
+                                "请先登录，或在 Web 中 [导入会话] 后点 [刷新]，或顶栏 [导入] WakeUp HTML"
                             } else {
                                 "会话已失效，请重新登录或通过 Web [导入会话]"
                             },
@@ -280,7 +350,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 return@launch
             }
-            val tab = _ui.value.selectedTab
             val displayWeek = _ui.value.timetableMeta?.displayWeek
             _ui.update {
                 it.copy(contentLoading = true, message = null, loggedIn = true, showLogin = false)
@@ -428,11 +497,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopSmsResendCooldown()
     }
 
+    fun importWakeUpTimetable(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _ui.update { it.copy(contentLoading = true, message = null) }
+            val text =
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.readBytes().toString(Charsets.UTF_8)
+                    }
+                }
+            if (text.isNullOrBlank()) {
+                _ui.update { it.copy(contentLoading = false, message = "无法读取所选文件") }
+                return@launch
+            }
+            repo.importWakeUpTimetableFile(text).fold(
+                onSuccess = { count ->
+                    reloadFromCache()
+                    val week = repo.cachedTimetableMeta()?.currentWeek
+                    val weekHint = week?.let { "（估算第 $it 周）" }.orEmpty()
+                    _ui.update {
+                        it.copy(
+                            contentLoading = false,
+                            selectedTab = 0,
+                            loginDeferred = true,
+                            showLogin = false,
+                            message = "已导入 $count 条课程记录$weekHint，可切换教学周",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _ui.update {
+                        it.copy(
+                            contentLoading = false,
+                            message = e.message ?: "导入失败，请确认是 WakeUp 树维导出的 HTML",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun setReminderLeadMinutes(minutes: Int) {
+        val clamped = minutes.coerceIn(CourseReminderPreferences.MIN_LEAD, CourseReminderPreferences.MAX_LEAD)
+        reminderPrefs.leadMinutes = clamped
+        _ui.update {
+            it.copy(
+                reminderLeadMinutes = clamped,
+                message = "已设置：开课前 $clamped 分钟内提醒",
+            )
+        }
+    }
+
     fun previewCourseNotification() {
         val ctx = getApplication<Application>()
+        val lead = _ui.value.reminderLeadMinutes
         when (CourseNotificationHelper.showPreview(ctx, _ui.value.courses)) {
             CourseNotificationHelper.PreviewResult.Sent ->
-                _ui.update { it.copy(message = "已发送调试上课通知，请看通知栏") }
+                _ui.update {
+                    it.copy(message = "已发送调试通知（按提前 $lead 分钟设定），请看通知栏")
+                }
             CourseNotificationHelper.PreviewResult.NoPermission ->
                 _ui.update { it.copy(message = "未获得通知权限，请在系统设置中允许通知") }
             CourseNotificationHelper.PreviewResult.NoCourses ->

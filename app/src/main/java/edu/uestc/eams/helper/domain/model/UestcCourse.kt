@@ -1,9 +1,6 @@
 package edu.uestc.eams.helper.domain.model
 
-/**
- * 从移动教务 / 教务 HTML 解析出的单条课表记录。
- * [weekday] 1=周一 … 7=周日；[period]、[endPeriod] 为节次（含端点）。
- */
+/** 单条课表记录。 */
 data class UestcCourse(
     val courseName: String,
     val teacher: String,
@@ -15,9 +12,7 @@ data class UestcCourse(
     val courseId: String = "",
     val lessonNo: String = "",
     val courseType: String = "",
-    /** 如 `08:30`，来自接口 `startTime`。 */
     val startTime: String = "",
-    /** 如 `10:05`，来自接口 `endTime`。 */
     val endTime: String = "",
 )
 
@@ -27,7 +22,6 @@ data class ExamItem(
     val room: String,
     val seat: String,
     val examType: String = "",
-    /** 考试开始时刻（毫秒）；无法解析时为 null。 */
     val startEpochMillis: Long? = null,
 ) {
     fun countdownMillis(now: Long = System.currentTimeMillis()): Long? {

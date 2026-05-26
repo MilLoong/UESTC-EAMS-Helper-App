@@ -122,7 +122,7 @@ internal fun GlassCard(modifier: Modifier = Modifier, content: @Composable () ->
     }
 }
 
-/** 课表 / 考试 / 成绩无数据时的占位，水平+垂直居中（与 [ScheduleTab] 空状态一致）。 */
+/** 无数据时的居中占位。 */
 @Composable
 internal fun EmptyHint(text: String, modifier: Modifier = Modifier) {
     Box(

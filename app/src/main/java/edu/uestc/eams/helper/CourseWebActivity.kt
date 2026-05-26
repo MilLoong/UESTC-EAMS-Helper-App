@@ -20,7 +20,7 @@ import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** 内置浏览器：统一认证与移动教务网页，支持导入会话写入本机登录状态。 */
+/** 内置浏览器与 Web 导入会话。 */
 class CourseWebActivity : AppCompatActivity() {
 
     private val appGraph get() = application as EamsHelperApp

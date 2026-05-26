@@ -47,10 +47,7 @@ private inline fun silentlyIgnore(block: () -> Unit) {
     }
 }
 
-/**
- * 统一身份认证（CAS）登录与短信二次认证。
- * 登录成功后建立移动教务会话并校验接口可用性。
- */
+/** CAS 登录、短信二次认证与移动教务换票。 */
 class CasLoginRepository(
     private val client: OkHttpClient,
     private val jar: InMemoryCookieJar,
@@ -65,9 +62,6 @@ class CasLoginRepository(
     @Volatile
     private var pendingReauthSms: PendingReauthSms? = null
 
-    /**
-     * 二次认证相关请求禁止自动跟随重定向，避免误入换票链导致长时间跳转或超时。
-     */
     private val idasNoFollowClient: OkHttpClient by lazy {
         client.newBuilder()
             .followRedirects(false)
@@ -87,7 +81,6 @@ class CasLoginRepository(
         const val FALLBACK_ONLY_WEB =
             "可点 Web 打开移动教务网页登录，登录后 导入会话，再回主页点 顶栏刷新。"
 
-        /** 与登录弹窗 [MainViewModel] 约定：首行 `SMS_CODE_TIME=秒数`，可选 `SMS_MOBILE=脱敏号`，其余为展示文案。 */
         const val SMS_PROMPT_CODE_TIME_PREFIX = "SMS_CODE_TIME="
         const val SMS_PROMPT_MOBILE_PREFIX = "SMS_MOBILE="
 
@@ -113,7 +106,6 @@ class CasLoginRepository(
             return lines.joinToString("\n")
         }
 
-        /** 优先展示接口返回的 `mobile` 脱敏号，如 `138****1234`。 */
         fun formatSmsSentHint(mobile: String?, serverMessage: String?): String {
             val mob = mobile?.trim().orEmpty()
             if (mob.isNotEmpty()) {
@@ -132,7 +124,7 @@ class CasLoginRepository(
             }
         }
 
-        /** 对齐 Python `cas_login` 内的 `checkNeedCaptcha.htl`；接口异常或非 JSON 则忽略（与脚本一致）。 */
+        /** 探测是否需要图形验证码。 */
         private fun CasLoginRepository.quietlyCheckNeedCaptcha(username: String) {
             try {
                 val enc = URLEncoder.encode(username, Charsets.UTF_8.name())
@@ -155,7 +147,7 @@ class CasLoginRepository(
         }
     }
 
-    /** 二次认证等待输入短信期间可调用；冷却秒数来自 JSON `codeTime` 或 `returnMessage` 文案。 */
+    /** 重新发送二次认证短信验证码。 */
     suspend fun resendReauthDynamicCode(): Result<ReauthSmsSendOutcome> =
         withContext(Dispatchers.IO) {
             val ctx =
@@ -391,18 +383,13 @@ class CasLoginRepository(
             }
         }
 
-    /** 不写 CAS：探测当前 Jar 是否仍可访问业务（移动教务或一网通）。 */
+    /** 探测一网通门户会话是否有效。 */
     suspend fun probeOnlinePortalSession(): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching { verifySessionAfterCas() }
         }
 
-    /**
-     * 消费 CAS `ticket=` 仅一次。
-     *
-     * OkHttp `followRedirects=true` 时，重定向链上的 ticket URL 已被自动 GET 消费；若再遍历
-     * [Response.priorResponse] 会触发 INVALID_TICKET（对齐 Python `allow_redirects=False` 单步消费）。
-     */
+    /** 消费 CAS ticket，避免重复跟跳导致 INVALID_TICKET。 */
     private fun consumeCasTicketIfNeededAlongPriorChain(
         client: OkHttpClient,
         leaf: Response,
@@ -511,7 +498,7 @@ class CasLoginRepository(
         traceCas("verifyEamsAppApiSession OK jwtLen=${jwt.length}")
     }
 
-    /** `GET ONLINE_PAGE_URL`：若仍被踢回 CAS，则会话不可用。请求头对齐 Python `_online_browser_headers_nav`。*/
+    /** 校验一网通门户页是否仍保持登录。 */
     private fun verifyOnlinePortalHome() {
         val req =
             Request.Builder()
@@ -549,7 +536,6 @@ class CasLoginRepository(
             (lower.contains("<form") || lower.contains("location"))
     }
 
-    /** @param credentialLandingHtml/Url CAS POST 后直接着陆页（Python `login_response.url`/`text`）；有则优先，避免误判需再 GET。 */
     private suspend fun smsIfNeeded(
         loginUrlStr: String,
         loginUsername: String,
@@ -609,7 +595,7 @@ class CasLoginRepository(
         }
     }
 
-    /** 对等 `complete_idas_reauth`：tenant → bfp → 刷新页 → 请求下发短信 → systemTime → reAuthSubmit → CAS 跳转。*/
+    /** 执行二次认证完整流程。 */
     private suspend fun completeIdasReauthLikePython(
         loginUrlStr: String,
         loginUsername: String,
@@ -800,7 +786,7 @@ class CasLoginRepository(
         )
     }
 
-    /** 提交密码前写入多因素浏览器指纹并请求 bfp/info。 */
+    /** 提交浏览器指纹。 */
     private fun primeIdasFingerprintBeforeCredentialPost(loginRefererPlain: String) {
         val fp = ensureMultifactorBfpCookieValue()
         silentlyIgnore {
@@ -821,9 +807,7 @@ class CasLoginRepository(
         traceCas("bfp/info before credential POST fp=${fp.take(8)}…")
     }
 
-    /**
-     * 同一响应可能先后写入与清除 CASTGC，以最终合并结果为准。
-     */
+    /** 从密码 POST 响应恢复 CASTGC。 */
     private fun ingestCastgcFromCredentialResponse(rsp: Response) {
         var tgt: String? = null
         for (h in rsp.headers("Set-Cookie")) {
@@ -941,7 +925,7 @@ class CasLoginRepository(
         }
     }
 
-    /** Idas XHR 若被 302 到登录页 / 返回 HTML，不交给 OkHttp 自动跟跳（避免超时与误消费 ticket）。 */
+    /** 处理 Idas XHR，禁止自动跟跳。 */
     private fun idasXhrFailureOutcome(
         rsp: Response,
         raw: String,
@@ -976,7 +960,7 @@ class CasLoginRepository(
         return null
     }
 
-    /** 发码接口要求 Referer 为二次认证页；否则按 service 拼标准地址。 */
+    /** 构建二次认证 Referer。 */
     private fun resolveReauthReferer(
         navigatedFinalUrl: String,
         serviceDecoded: String,
@@ -991,7 +975,7 @@ class CasLoginRepository(
         return "${ApiConstants.CAS_BASE_URL}/reAuthCheck/reAuthLoginView.do?isMultifactor=true&service=$svc"
     }
 
-    /** 对齐 Python `_reauth_send_code_outcome`（含 `code_time_fail` 与文案里的秒数）。 */
+    /** 解析发码接口响应。 */
     private fun parseReauthDynamicCodeResponse(raw: String): ReauthSmsSendOutcome {
         val trimmed = raw.trim()
         traceCas(
@@ -1102,7 +1086,7 @@ class CasLoginRepository(
         return null
     }
 
-    /** 从 JSON 或二次认证页脚本中提取脱敏手机号，如 `138****1234`。 */
+    /** 解析脱敏手机号。 */
     private fun parseMaskedMobileFromText(text: String): String? {
         if (text.isBlank()) return null
         Regex(""""mobile"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
@@ -1119,7 +1103,6 @@ class CasLoginRepository(
         return null
     }
 
-    /** 请求携带中文区域 Cookie。 */
     private fun primeIdasLocaleCookie() {
         val url = ApiConstants.casLoginUrlWithService().toHttpUrl()
         val c =
@@ -1162,7 +1145,7 @@ class CasLoginRepository(
     private fun resolveReAuthServiceDecoded(finalNavUrl: String, html: String): String =
         decodeCasServiceParam(finalNavUrl, html)
 
-    /** 从着陆 URL / 页面 JSON 解析 service，并修正历史版本对 redirectUrl 的双层 encode。 */
+    /** 解析 CAS service URL。 */
     private fun decodeCasServiceParam(finalNavUrl: String, html: String): String {
         parseReAuthInlineService(html)?.replace("\\/", "/")?.takeIf { it.startsWith("http", ignoreCase = true) }?.let {
             return normalizeEamsappCasService(it)
@@ -1313,7 +1296,6 @@ private fun logCastgcDetailSnapshot(jar: InMemoryCookieJar, ctx: String) {
     }
 }
 
-/** OkHttp Jar 打点：不打 Cookie 值，仅域名+名称便于对照是否存在 CASTGC/JSESSIONID 入账。*/
 private fun logJarCookiesAfterCredentialPost(jar: InMemoryCookieJar, httpCode: Int) {
     val snap = jar.snapshot()
     val brief =
@@ -1329,9 +1311,6 @@ private fun logJarCookiesAfterCredentialPost(jar: InMemoryCookieJar, httpCode: I
 private fun normalizeCookieDomainBrief(domain: String): String =
     domain.removePrefix(".").lowercase()
 
-/**
- * [看不到 CASTGC]多为 HttpOnly（WebView/Java 可读列表不可见）；本 App 仅以 OkHttp [InMemoryCookieJar] 为准。
- */
 private fun castgcMissingExplain(): String =
     "未能完成统一身份认证，请检查学号与密码后重试；若仍失败请用右上角 Web 登录。"
 
@@ -1353,7 +1332,6 @@ private fun String.containsAntiBotTs(): Boolean =
     GatewayTsShellHeuristic.isLikelyThinGatewayPlaceholder(this)
 
 private enum class CredentialFailKind {
-    /** 页面 showErrorTip 等明确提示学号/密码问题。 */
     WRONG_USERNAME_PASSWORD,
     CAPTCHA_OR_RISK,
     SESSION_OR_FORM,
@@ -1374,9 +1352,6 @@ private data class CredentialFailureDiagnosis(
 
 private object Forms {
 
-    /**
-     * 优先在 `#casLoginForm` / `#fm1` 内匹配，避免页内其它片段误匹配 `execution`/盐。
-     */
     fun execution(html: String): String? {
         casLoginFormInner(html)?.let { inner ->
             matchExecution(inner)?.let { return it }
@@ -1386,7 +1361,6 @@ private object Forms {
 
     fun pwdSalt(html: String): String? = pwdSaltInfo(html)?.salt
 
-    /** 与前端 `_etd2(password, #pwdDefaultEncryptSalt)` 一致，优先 [pwdDefaultEncryptSalt]。 */
     fun pwdSaltInfo(html: String): PwdSaltInfo? {
         matchPwdSaltField(html, "pwdDefaultEncryptSalt")?.let {
             return PwdSaltInfo(it, "pwdDefaultEncryptSalt")
@@ -1407,9 +1381,6 @@ private object Forms {
 
     data class PwdSaltInfo(val salt: String, val fieldId: String)
 
-    /**
-     * 与 Python `test_eams_table.cas_login` 内 **`execution_patterns`**（双引号字面 id）及后续宽松模式并存。
-     */
     private fun matchExecution(htmlFragment: String): String? {
         val patterns =
             listOf(
@@ -1467,7 +1438,6 @@ private object Forms {
         }
     }
 
-    /** 登录表单内部 HTML（不含外层 `<form>`）。尽量覆盖 CAS 多套主题。#credentials、action=/login… 等 */
     fun casLoginFormInner(html: String): String? {
         val byId =
             listOf(
@@ -1493,7 +1463,6 @@ private object Forms {
         return null
     }
 
-    /** 浏览器会原样提交表单里所有 hidden；缺了 `rmShown`、`type` 等常会被统一判成[口令错误]。*/
     fun casLoginFormHidden(loginPageHtml: String): LinkedHashMap<String, String> {
         val out = LinkedHashMap<String, String>()
         casLoginFormInner(loginPageHtml)?.let { out.putAll(hiddenInputs(it)) }
@@ -1503,9 +1472,6 @@ private object Forms {
         return out
     }
 
-    /**
-     * 仅提交学号密码登录表单字段，勿混入页面上其它登录入口的隐藏项。
-     */
     fun credentialPostFields(
         loginPageHtml: String,
         username: String,
@@ -1527,7 +1493,6 @@ private object Forms {
         )
     }
 
-    /** 优先使用学号密码表单的 action 作为 POST 地址。 */
     fun casLoginPostUrl(html: String, fallbackUrl: String): HttpUrl {
         val patterns =
             listOf(
@@ -1574,7 +1539,7 @@ private object Forms {
         return null
     }
 
-    /** 登录表单是否要求图形/滑块验证码（勿把二次认证页[短信验证码]误判进来）。 */
+    /** 登录页是否需要图形验证码。 */
     fun loginFormRequiresGraphicalCaptcha(html: String): Boolean {
         val inner = casLoginFormInner(html) ?: return false
         if (Regex("""id=["']captchaResponse["']""", RegexOption.IGNORE_CASE).containsMatchIn(inner)) {
@@ -1588,7 +1553,7 @@ private object Forms {
         return false
     }
 
-    /** 密码 POST 无 CASTGC 时，根据页面文案粗分原因（供日志与用户提示）。 */
+    /** 根据页面文案判断登录失败原因。 */
     fun diagnoseCredentialFailure(html: String): CredentialFailureDiagnosis {
         val pageTip = extractError(html)?.trim().orEmpty()
         val formInner = casLoginFormInner(html).orEmpty()
@@ -1625,19 +1590,12 @@ private object Forms {
         return CredentialFailureDiagnosis(kind, pageTip)
     }
 
-    /**
-     * Python `_is_multifactor_reauth`（`cas_login` 在 CASTGC/Ticket 前分支）：任一命中即应按需走二次认证链路。
-     * [smsPage] 为表单控件级的更严判定，两者合一避免漏判（你遇到的 `smsLike=false` 即属此类）。
-     */
+    /** 判断页面是否需要短信或多因素二次认证。 */
     fun needsIdasSmsOrMultifactorReauth(html: String, pageUrl: String): Boolean {
         if (smsPage(html)) return true
         val u = pageUrl.lowercase(Locale.ROOT)
         if ("reauthcheck" in u || "ismultifactor=true" in u || "multifactor" in u) return true
         if (html.isEmpty()) return false
-        /**
-         * Python 只扫前 8000 字；实测 Idas SPA 可把 `reAuthParams`/`reAuthType` JSON 排到更后，
-         * `mfa_like` 误判为假。此处扩大窗口（封顶防 OOM）。
-         */
         val maxScan = kotlin.math.min(html.length, 400_000)
         val win = html.substring(0, maxScan)
         if ("二次认证" in win || "多因素" in win) return true
@@ -1673,10 +1631,7 @@ private object Forms {
         return Regex(""""reAuthType"\s*:\s*"\d"""").containsMatchIn(win)
     }
 
-    /**
-     * CAS 若以 **HTTP 200**（或正文内嵌链接）返回 `ticket=`，需在客户端显式 GET 消费；
-     * 对等 Python：ticket 可能落在 **eams/sso/online** 等任意 `*.uestc.edu.cn`。
-     */
+    /** 从 HTML 中提取 CAS ticket URL。 */
     fun extractCasOnlineTicketCandidates(html: String): List<String> {
         if (html.isBlank()) return emptyList()
         val raw = html.replace("&amp;", "&")
@@ -1709,7 +1664,6 @@ private object Forms {
         return out.distinct().take(8)
     }
 
-    /** 末位递减裁剪直到 [toHttpUrlOrNull] 可解析、主机为校级域且含 `ticket`。 */
     private fun coerceParsableOnlineTicketUrl(candidate: String): String? {
         if (!candidate.contains("ticket=", ignoreCase = true)) return null
         var norm = candidate.replace("\\/", "/").trim()
@@ -1731,7 +1685,6 @@ private object Forms {
     }
 
 
-    /** 兼容旧 Html；多数场景请用 [needsIdasSmsOrMultifactorReauth]。 */
     fun smsPage(html: String): Boolean {
         val lower = html.lowercase()
         val needsForm =
@@ -1785,16 +1738,11 @@ private fun OkHttpClient.getBody(url: String): String =
         .execute()
         .use { it.body?.string().orEmpty() }
 
-/** Follow 重定向后的最终请求 URL（探针 MFA 着陆页的真实 path）。*/
 private fun OkHttpClient.getHtmlPair(url: String): Pair<String, String> =
     newCall(Request.Builder().url(url).get().build()).execute().use { rsp ->
         (rsp.body?.string().orEmpty()) to rsp.request.url.toString()
     }
 
-/**
- * 组装与浏览器一致的表单：先合并 `casLoginForm` 内所有 hidden，再覆盖账号/密文/execution。
- * CAS 常因缺 hidden 返回[用户名或密码错误]——与明文口令无关。
- */
 private fun Request.Builder.applyIdasNavigateGetHeaders(): Request.Builder =
     header("Upgrade-Insecure-Requests", "1")
         .header("Sec-Fetch-Site", "same-origin")
@@ -1802,7 +1750,6 @@ private fun Request.Builder.applyIdasNavigateGetHeaders(): Request.Builder =
         .header("Sec-Fetch-User", "?1")
         .header("Sec-Fetch-Dest", "document")
 
-/** 密码加密：随机前缀 + 明文口令，再 Base64。 */
 private fun expectedAesPasswordBase64Length(passwordUtf8Bytes: Int, randomPrefixLen: Int = 64): Int {
     val plainLen = randomPrefixLen + passwordUtf8Bytes
     val paddedLen = plainLen + (16 - (plainLen % 16))
