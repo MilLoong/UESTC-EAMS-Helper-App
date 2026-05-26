@@ -58,9 +58,21 @@ import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
 
-private fun courseColorForKey(key: String): Long {
-    val idx = (key.hashCode() and 0x7fffffff) % coursePalette.size
-    return coursePalette[idx]
+/** 课表块颜色键：以课程名为准，避免同一门课因 courseId 变化而变色。 */
+private fun courseColorKey(course: UestcCourse): String =
+    course.courseName.trim().ifBlank { course.courseId.trim() }
+
+/** 按课程名排序后依次取色，同名课各周颜色一致；超过色板长度才复用。 */
+private fun buildCourseColorMap(courses: List<UestcCourse>): Map<String, Long> {
+    val keys =
+        courses
+            .map(::courseColorKey)
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+    return keys.withIndex().associate { (index, key) ->
+        key to coursePalette[index % coursePalette.size]
+    }
 }
 
 private val coursePalette =
@@ -73,6 +85,14 @@ private val coursePalette =
         0xFFFF8A80,
         0xFF81C784,
         0xFF64B5F6,
+        0xFF9575CD,
+        0xFF4DB6AC,
+        0xFFFFB74D,
+        0xFF7986CB,
+        0xFFAED581,
+        0xFFF06292,
+        0xFF4FC3F7,
+        0xFFBA68C8,
     )
 
 private val timeColumnWidth = 38.dp
@@ -93,20 +113,20 @@ fun ScheduleTab(
     onPagerScrollConsumed: () -> Unit = {},
 ) {
     val today = LocalDate.now()
-    val currentWeek = timetableMeta?.currentWeek ?: 1
-    val displayWeek = timetableMeta?.displayWeek ?: currentWeek
-    val weekOneMonday = timetableMeta?.weekOneMondayDate()
-
-    if (courses.isEmpty() && timetableMeta == null) {
-        EmptyHint(
-            "暂无课表\n登录或 Web [导入会话] 后点 [刷新]\n或顶栏 [导入] 树维课表 HTML",
-            modifier,
-        )
-        return
-    }
+    val shellMeta =
+        timetableMeta
+            ?: TimetableMeta(
+                semesterCode = "",
+                currentWeek = 1,
+                displayWeek = 1,
+            )
+    val currentWeek = shellMeta.currentWeek
+    val displayWeek = shellMeta.displayWeek
+    val weekOneMonday = shellMeta.weekOneMondayDate()
+    val showSetupHint = timetableMeta == null && courses.isEmpty()
 
     val pageCount =
-        remember(courses) {
+        remember(courses, timetableMeta) {
             courses
                 .maxOfOrNull { WeekSpec.maxWeekNumber(it.weeks) }
                 ?.coerceIn(1, TIMETABLE_PAGE_COUNT)
@@ -139,6 +159,7 @@ fun ScheduleTab(
         TimetableWeekCalendar.formatHeaderDate(weekMonday) +
             " - " +
             TimetableWeekCalendar.formatHeaderDate(weekMonday.plusDays(6))
+    val colorByKey = remember(courses) { buildCourseColorMap(courses) }
     LaunchedEffect(pagerScrollWeek, pageCount) {
         val week = pagerScrollWeek ?: return@LaunchedEffect
         val target = (week - 1).coerceIn(0, pageCount - 1)
@@ -222,19 +243,30 @@ fun ScheduleTab(
             }
         }
         HorizontalDivider()
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.weight(1f),
-            beyondViewportPageCount = 1,
-        ) { page ->
-            ScheduleWeekPage(
-                weekNumber = page + 1,
-                courses = courses,
-                currentWeek = currentWeek,
-                today = today,
-                weekOneMonday = weekOneMonday,
+        Box(Modifier.weight(1f)) {
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier.fillMaxSize(),
-            )
+                beyondViewportPageCount = 1,
+            ) { page ->
+                ScheduleWeekPage(
+                    weekNumber = page + 1,
+                    courses = courses,
+                    colorByKey = colorByKey,
+                    currentWeek = currentWeek,
+                    today = today,
+                    weekOneMonday = weekOneMonday,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (showSetupHint) {
+                EmptyHint(
+                    "暂无课表\n登录或 Web [导入会话] 后点 [刷新]\n或顶栏 [导入] 树维课表 HTML",
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
+                )
+            }
         }
     }
 }
@@ -243,6 +275,7 @@ fun ScheduleTab(
 private fun ScheduleWeekPage(
     weekNumber: Int,
     courses: List<UestcCourse>,
+    colorByKey: Map<String, Long>,
     currentWeek: Int,
     today: LocalDate,
     weekOneMonday: LocalDate?,
@@ -262,13 +295,6 @@ private fun ScheduleWeekPage(
             AdjacentCourseMerge.merge(CourseWeekFilter.filterForWeek(courses, weekNumber))
         }
     val byDay = remember(visible) { visible.groupBy { it.weekday } }
-    val colorByKey =
-        remember(courses) {
-            courses
-                .map { it.courseId.ifBlank { it.courseName } }
-                .distinct()
-                .associateWith { key -> courseColorForKey(key) }
-        }
     val vScroll = remember(weekNumber) { ScrollState(0) }
     val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
 
@@ -292,31 +318,41 @@ private fun ScheduleWeekPage(
             }
         }
         HorizontalDivider()
-        Row(
-            Modifier
-                .weight(1f)
-                .verticalScroll(vScroll),
-        ) {
-            Column(
+        Box(Modifier.weight(1f)) {
+            Row(
                 Modifier
-                    .width(timeColumnWidth)
-                    .height(gridHeight)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                    .fillMaxSize()
+                    .verticalScroll(vScroll),
             ) {
-                UestcPeriodTime.slots.forEach { slot ->
-                    PeriodLabelCell(slot.index, slot.start, slot.end, rowHeight)
+                Column(
+                    Modifier
+                        .width(timeColumnWidth)
+                        .height(gridHeight)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                ) {
+                    UestcPeriodTime.slots.forEach { slot ->
+                        PeriodLabelCell(slot.index, slot.start, slot.end, rowHeight)
+                    }
+                }
+                Row(Modifier.height(gridHeight).weight(1f)) {
+                    for (d in 1..7) {
+                        DayColumn(
+                            courses = byDay[d].orEmpty(),
+                            rowHeight = rowHeight,
+                            gridHeight = gridHeight,
+                            colorByKey = colorByKey,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
-            Row(Modifier.height(gridHeight).weight(1f)) {
-                for (d in 1..7) {
-                    DayColumn(
-                        courses = byDay[d].orEmpty(),
-                        rowHeight = rowHeight,
-                        gridHeight = gridHeight,
-                        colorByKey = colorByKey,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            if (visible.isEmpty()) {
+                Text(
+                    "本周无课程",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    modifier = Modifier.align(Alignment.Center),
+                )
             }
         }
     }
@@ -441,7 +477,7 @@ private fun DayColumn(
             val span = (course.endPeriod - course.period + 1).coerceAtLeast(1)
             val topPx = with(density) { rowHeight.toPx() * (course.period - 1) }
             val heightPx = with(density) { rowHeight.toPx() * span }
-            val colorKey = course.courseId.ifBlank { course.courseName }
+            val colorKey = courseColorKey(course)
             val bg = Color(colorByKey[colorKey] ?: coursePalette[0]).copy(alpha = 0.9f)
             CourseCard(
                 course = course,

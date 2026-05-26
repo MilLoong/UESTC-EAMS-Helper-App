@@ -86,12 +86,19 @@ class AcademicCache(context: Context) {
 
     private fun syncKey(semesterCode: String, week: Int): String = "$semesterCode|$week"
 
-    private fun ensureWeekCacheSemester(semesterCode: String) {
+    /**
+     * 学期代码变化时清空在线课表周缓存与合并课表，避免新学期仍显示旧数据。
+     * 树维导入学期为 [IMPORT_SEMESTER]，与教务学期互切时同样会清空。
+     */
+    fun ensureWeekCacheSemester(semesterCode: String) {
         val stored = prefs.getString(KEY_WEEK_CACHE_SEMESTER, null)
         if (stored != semesterCode) {
             prefs.edit()
                 .putString(KEY_WEEK_CACHE_SEMESTER, semesterCode)
                 .remove(KEY_WEEK_COURSES)
+                .remove(KEY_COURSES)
+                .remove(KEY_WEEK_SYNC_KEY)
+                .remove(KEY_WEEK_SYNC_DAY)
                 .apply()
         }
     }
