@@ -79,6 +79,7 @@ class UestcRepository(
                 }
                 val ck = ensureMobileCookieHeader()
                 val semester = api.fetchCurSemesterCode(ck) ?: "25262"
+                cache.ensureWeekCacheSemester(semester)
                 val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
                 val displayWeek = week?.coerceAtLeast(1) ?: currentWeek
                 val meta =

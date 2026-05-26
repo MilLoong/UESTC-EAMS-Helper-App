@@ -277,14 +277,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun shiftTimetableWeek(delta: Int) {
-        val meta = _ui.value.timetableMeta ?: return
-        val target = (meta.displayWeek + delta).coerceAtLeast(1)
+        val base = _ui.value.timetableMeta?.displayWeek ?: 1
+        val target = (base + delta).coerceAtLeast(1)
         _ui.update { it.copy(timetablePagerScrollWeek = target) }
-        loadTimetableWeek(target)
+        selectTimetableWeek(target)
     }
 
     fun selectTimetableWeek(week: Int) {
-        loadTimetableWeek(week.coerceAtLeast(1))
+        val w = week.coerceAtLeast(1)
+        if (_ui.value.timetableMeta == null) {
+            _ui.update {
+                it.copy(
+                    timetableMeta =
+                        TimetableMeta(
+                            semesterCode = "",
+                            currentWeek = 1,
+                            displayWeek = w,
+                        ),
+                )
+            }
+        }
+        loadTimetableWeek(w)
     }
 
     fun goCurrentTimetableWeek() {
