@@ -54,6 +54,8 @@ data class MainUiState(
     val updatePrompt: UpdatePrompt? = null,
     val reminderLeadMinutes: Int = CourseReminderPreferences.DEFAULT_LEAD_MINUTES,
     val wakeUpImportPrompt: WakeUpImportPrompt? = null,
+    /** 顶栏切周时让 Pager 滚到该周；消费后清空。 */
+    val timetablePagerScrollWeek: Int? = null,
 )
 
 /** 树维 HTML 已解析，待用户确认第 1 教学周起始日。 */
@@ -87,6 +89,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val smsContinuation = AtomicReference<CancellableContinuation<String>?>(null)
     private var smsCooldownJob: Job? = null
+    private var timetableWeekLoadJob: Job? = null
+    private var timetableWeekLoadGeneration = 0
 
     init {
         reloadFromCache()
@@ -274,7 +278,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shiftTimetableWeek(delta: Int) {
         val meta = _ui.value.timetableMeta ?: return
-        selectTimetableWeek(meta.displayWeek + delta)
+        val target = (meta.displayWeek + delta).coerceAtLeast(1)
+        _ui.update { it.copy(timetablePagerScrollWeek = target) }
+        loadTimetableWeek(target)
     }
 
     fun selectTimetableWeek(week: Int) {
@@ -283,37 +289,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun goCurrentTimetableWeek() {
         val current = _ui.value.timetableMeta?.currentWeek ?: return
+        _ui.update { it.copy(timetablePagerScrollWeek = current) }
         loadTimetableWeek(current)
     }
 
+    fun consumeTimetablePagerScroll() {
+        if (_ui.value.timetablePagerScrollWeek != null) {
+            _ui.update { it.copy(timetablePagerScrollWeek = null) }
+        }
+    }
+
     private fun loadTimetableWeek(week: Int, forceNetwork: Boolean = false) {
-        viewModelScope.launch {
-            if (!forceNetwork && repo.switchTimetableWeekLocal(week)) {
-                reloadFromCache()
-                return@launch
-            }
-            val semester = _ui.value.timetableMeta?.semesterCode
-            val useCache =
-                !forceNetwork &&
-                    semester != null &&
-                    repo.hasCachedTimetableWeek(semester, week)
-            if (!useCache) {
-                _ui.update { it.copy(contentLoading = true, message = null) }
-            }
-            repo.refreshTimetable(week, forceNetwork = forceNetwork).fold(
-                onSuccess = {
+        timetableWeekLoadJob?.cancel()
+        val generation = ++timetableWeekLoadGeneration
+        timetableWeekLoadJob =
+            viewModelScope.launch {
+                val w = week.coerceAtLeast(1)
+                if (!forceNetwork && repo.switchTimetableWeekLocal(w)) {
+                    if (generation != timetableWeekLoadGeneration) return@launch
                     reloadFromCache()
-                    _ui.update { it.copy(contentLoading = false) }
-                },
-                onFailure = { e ->
-                    _ui.update {
-                        it.copy(
-                            contentLoading = false,
-                            message = e.message ?: "切换周次失败",
-                        )
-                    }
-                },
-            )
+                    prefetchAdjacentTimetableWeeks(w, generation)
+                    return@launch
+                }
+                repo.refreshTimetable(w, forceNetwork = forceNetwork).fold(
+                    onSuccess = {
+                        if (generation != timetableWeekLoadGeneration) return@fold
+                        reloadFromCache()
+                        prefetchAdjacentTimetableWeeks(w, generation)
+                    },
+                    onFailure = { e ->
+                        if (generation != timetableWeekLoadGeneration) return@fold
+                        _ui.update {
+                            it.copy(message = e.message ?: "切换周次失败")
+                        }
+                    },
+                )
+            }
+    }
+
+    private fun prefetchAdjacentTimetableWeeks(centerWeek: Int, generation: Int) {
+        if (repo.isOfflineImported()) return
+        viewModelScope.launch {
+            val semester = repo.cachedTimetableMeta()?.semesterCode ?: return@launch
+            for (delta in intArrayOf(-1, 1)) {
+                if (generation != timetableWeekLoadGeneration) return@launch
+                val w = centerWeek + delta
+                if (w < 1) continue
+                if (repo.hasCachedTimetableWeek(semester, w)) continue
+                repo.refreshTimetable(w, forceNetwork = false).getOrNull()
+            }
         }
     }
 

@@ -58,6 +58,11 @@ import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
 
+private fun courseColorForKey(key: String): Long {
+    val idx = (key.hashCode() and 0x7fffffff) % coursePalette.size
+    return coursePalette[idx]
+}
+
 private val coursePalette =
     longArrayOf(
         0xFF5B8DEF,
@@ -79,11 +84,13 @@ private const val TIMETABLE_PAGE_COUNT = 30
 fun ScheduleTab(
     courses: List<UestcCourse>,
     timetableMeta: TimetableMeta?,
+    pagerScrollWeek: Int? = null,
     modifier: Modifier = Modifier,
     onPrevWeek: () -> Unit = {},
     onNextWeek: () -> Unit = {},
     onWeekSelected: (Int) -> Unit = {},
     onGoCurrentWeek: () -> Unit = {},
+    onPagerScrollConsumed: () -> Unit = {},
 ) {
     val today = LocalDate.now()
     val currentWeek = timetableMeta?.currentWeek ?: 1
@@ -132,27 +139,20 @@ fun ScheduleTab(
         TimetableWeekCalendar.formatHeaderDate(weekMonday) +
             " - " +
             TimetableWeekCalendar.formatHeaderDate(weekMonday.plusDays(6))
-    var syncingPagerFromModel by remember { mutableStateOf(false) }
-
-    LaunchedEffect(displayWeek) {
-        val target = (displayWeek - 1).coerceIn(0, pageCount - 1)
-        if (pagerState.currentPage == target) return@LaunchedEffect
-        syncingPagerFromModel = true
-        try {
-            pagerState.animateScrollToPage(target)
-        } finally {
-            syncingPagerFromModel = false
+    LaunchedEffect(pagerScrollWeek, pageCount) {
+        val week = pagerScrollWeek ?: return@LaunchedEffect
+        val target = (week - 1).coerceIn(0, pageCount - 1)
+        if (pagerState.currentPage != target) {
+            pagerState.scrollToPage(target)
         }
+        onPagerScrollConsumed()
     }
 
-    LaunchedEffect(pagerState, displayWeek) {
+    LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                val week = page + 1
-                if (!syncingPagerFromModel && week != displayWeek) {
-                    onWeekSelected(week)
-                }
+                onWeekSelected(page + 1)
             }
     }
 
@@ -263,13 +263,11 @@ private fun ScheduleWeekPage(
         }
     val byDay = remember(visible) { visible.groupBy { it.weekday } }
     val colorByKey =
-        remember(visible) {
-            val map = mutableMapOf<String, Long>()
-            visible.forEachIndexed { i, c ->
-                val key = c.courseId.ifBlank { c.courseName }
-                map.putIfAbsent(key, coursePalette[i % coursePalette.size])
-            }
-            map
+        remember(courses) {
+            courses
+                .map { it.courseId.ifBlank { it.courseName } }
+                .distinct()
+                .associateWith { key -> courseColorForKey(key) }
         }
     val vScroll = remember(weekNumber) { ScrollState(0) }
     val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
