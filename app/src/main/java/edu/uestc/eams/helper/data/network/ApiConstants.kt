@@ -49,6 +49,14 @@ object ApiConstants {
 
     const val EAMS_SERVICE_RAW = "$BASE_EAMS/eams/login.action"
 
+    /** 与浏览器访问 idas 时常见的 service 参数一致，用于校内网可达性探测。 */
+    const val CAS_CAMPUS_PROBE_SERVICE_RAW = "$BASE_EAMS/eams/"
+
+    val CAS_CAMPUS_PROBE_LOGIN_URL: String
+        get() =
+            "$CAS_BASE_URL/login?service=" +
+                URLEncoder.encode(CAS_CAMPUS_PROBE_SERVICE_RAW, Charsets.UTF_8.name())
+
     fun casServiceEncoded(): String =
         URLEncoder.encode(CAS_SERVICE_RAW, Charsets.UTF_8.name())
 

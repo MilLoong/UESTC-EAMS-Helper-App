@@ -2,6 +2,8 @@ package edu.uestc.eams.helper.data.repository
 
 import edu.uestc.eams.helper.data.network.CampusNetworkReachability
 import edu.uestc.eams.helper.data.network.EamsFetchException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -10,16 +12,22 @@ import javax.net.ssl.SSLException
 
 internal object UserDataFetchErrors {
 
-    fun map(throwable: Throwable): Throwable {
+    suspend fun map(throwable: Throwable): Throwable {
         if (throwable is EamsFetchException) return throwable
-        val reachable = CampusNetworkReachability.canReachCampusAuth()
         val auth = isLikelyAuthFailure(throwable)
         val network = isLikelyNetworkFailure(throwable)
-        if (!reachable && (network || auth)) {
-            return EamsFetchException.OffCampus(throwable)
-        }
-        if (auth && reachable) {
-            return EamsFetchException.SessionInvalid(throwable)
+        if (!auth && !network) return throwable
+
+        val reachable =
+            withContext(Dispatchers.IO) {
+                CampusNetworkReachability.canReachCampusAuth()
+            }
+        if (auth) {
+            return if (reachable) {
+                EamsFetchException.SessionInvalid(throwable)
+            } else {
+                EamsFetchException.OffCampus(throwable)
+            }
         }
         if (network && !reachable) {
             return EamsFetchException.OffCampus(throwable)
