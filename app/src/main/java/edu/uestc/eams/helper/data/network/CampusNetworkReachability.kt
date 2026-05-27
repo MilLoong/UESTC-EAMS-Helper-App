@@ -5,13 +5,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * 判断当前网络是否像在校内网：探测统一认证 idas，无需已登录移动教务。
- * eamsapp 需有效会话才有正常响应，不适合用来判断校外/校内。
- *
- * 须在后台线程调用（会发起同步 HTTP）。已登录时常为 **302** 跳教务，未登录为 **200** 登录页，
- * 任意 HTTP 状态码（100–599）均视为可达；仅连接/超时/SSL 等异常视为不可达。
- */
+/** 用 idas 探测校内网可达性；须在后台线程调用。eamsapp 需会话，不用于此判断。 */
 object CampusNetworkReachability {
 
     private val probeClient: OkHttpClient by lazy {

@@ -45,7 +45,6 @@ android {
                 storeFile = rootProject.file(uploadKeystoreProperties.getProperty("storeFile")!!.trim())
                 storePassword = storePass
                 keyAlias = uploadKeystoreProperties.getProperty("keyAlias")
-                // upload.jks is PKCS12: keytool only uses the store password for the private key
                 keyPassword = storePass
             }
         }
