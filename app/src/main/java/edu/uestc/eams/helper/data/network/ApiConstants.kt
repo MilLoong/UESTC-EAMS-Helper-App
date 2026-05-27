@@ -49,7 +49,6 @@ object ApiConstants {
 
     const val EAMS_SERVICE_RAW = "$BASE_EAMS/eams/login.action"
 
-    /** 与浏览器访问 idas 时常见的 service 参数一致，用于校内网可达性探测。 */
     const val CAS_CAMPUS_PROBE_SERVICE_RAW = "$BASE_EAMS/eams/"
 
     val CAS_CAMPUS_PROBE_LOGIN_URL: String
