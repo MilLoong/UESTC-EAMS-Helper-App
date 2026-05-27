@@ -1,6 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+val uploadKeystorePropertiesFile = rootProject.file("keystore.properties")
+val uploadKeystoreProperties =
+    Properties().apply {
+        if (uploadKeystorePropertiesFile.exists()) {
+            uploadKeystorePropertiesFile.inputStream().use { load(it) }
+        }
+    }
+
+fun uploadSigningReady(): Boolean {
+    if (!uploadKeystorePropertiesFile.exists()) return false
+    val path = uploadKeystoreProperties.getProperty("storeFile")?.trim().orEmpty()
+    if (path.isEmpty()) return false
+    return rootProject.file(path).isFile
 }
 
 android {
@@ -15,19 +32,38 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.1.2"
+        versionCode = 23
+        versionName = "1.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("upload") {
+            if (uploadSigningReady()) {
+                storeFile = rootProject.file(uploadKeystoreProperties.getProperty("storeFile")!!.trim())
+                storePassword = uploadKeystoreProperties.getProperty("storePassword")
+                keyAlias = uploadKeystoreProperties.getProperty("keyAlias")
+                keyPassword = uploadKeystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (uploadSigningReady()) {
+                signingConfig = signingConfigs.getByName("upload")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (uploadSigningReady()) {
+                signingConfig = signingConfigs.getByName("upload")
+            }
         }
     }
 

@@ -94,7 +94,7 @@
 
 ## 构建与发布
 
-- 日常调试：`assembleDebug`
+- 日常调试：`assembleDebug`；对外 APK 仍为 debug 包，建议配置统一上传证书以免与本机/Android 默认 debug 签名冲突，见根目录 `keystore.properties.example`
 - 本工程默认关闭 `assembleRelease` 相关任务；需要发布包时请自行配置签名与 ProGuard。
 - 用户安装包见 [UESTC-EAMS-Helper-App Releases](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest)。
 

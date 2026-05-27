@@ -14,5 +14,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
+signing/*.jks
+signing/*.keystore
 /.ddoge_ref/
 .kotlin/

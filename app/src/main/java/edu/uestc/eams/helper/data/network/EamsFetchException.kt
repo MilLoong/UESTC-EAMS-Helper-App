@@ -6,11 +6,11 @@ sealed class EamsFetchException(
     cause: Throwable? = null,
 ) : Exception(message, cause) {
 
-    /** 无法连通 eamsapp，多为未在校内网；不清理本地登录。 */
+    /** 无法连通统一认证 idas，多为未在校内网；不清理本地登录。 */
     class OffCampus(
         cause: Throwable? = null,
     ) : EamsFetchException(
-        "可能未在校内网环境，无法访问移动教务。请连接校园网或 VPN 后再试。登录状态已保留。",
+        "可能未在校内网环境，无法访问学校统一认证。请连接校园网或 VPN 后再试。登录状态已保留。",
         cause,
     )
 
