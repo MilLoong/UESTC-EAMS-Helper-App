@@ -17,5 +17,6 @@ local.properties
 keystore.properties
 signing/*.jks
 signing/*.keystore
+signing/github-secrets-local.txt
 /.ddoge_ref/
 .kotlin/
