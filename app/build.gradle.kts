@@ -41,10 +41,12 @@ android {
     signingConfigs {
         create("upload") {
             if (uploadSigningReady()) {
+                val storePass = uploadKeystoreProperties.getProperty("storePassword")
                 storeFile = rootProject.file(uploadKeystoreProperties.getProperty("storeFile")!!.trim())
-                storePassword = uploadKeystoreProperties.getProperty("storePassword")
+                storePassword = storePass
                 keyAlias = uploadKeystoreProperties.getProperty("keyAlias")
-                keyPassword = uploadKeystoreProperties.getProperty("keyPassword")
+                // upload.jks is PKCS12: keytool only uses the store password for the private key
+                keyPassword = storePass
             }
         }
     }

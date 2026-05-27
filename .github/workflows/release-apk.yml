@@ -3,7 +3,7 @@
 #
 # 一次性配置：在源码仓库 Settings → Secrets → Actions 添加
 #   RELEASE_REPO_TOKEN = 对 UESTC-EAMS-Helper-App 有 repo 权限的 PAT
-#   UPLOAD_KEYSTORE_BASE64 / UPLOAD_STORE_PASSWORD / UPLOAD_KEY_PASSWORD / UPLOAD_KEY_ALIAS
+#   UPLOAD_KEYSTORE_BASE64 / UPLOAD_STORE_PASSWORD / UPLOAD_KEY_ALIAS
 #   见仓库根目录 keystore.properties.example
 #
 # 日常发布：
@@ -91,21 +91,30 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Configure UPLOAD_KEYSTORE_BASE64, UPLOAD_STORE_PASSWORD, UPLOAD_KEY_PASSWORD (and UPLOAD_KEY_ALIAS) in Actions secrets"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ]; then
+            echo "::error::Configure UPLOAD_KEYSTORE_BASE64, UPLOAD_STORE_PASSWORD (and UPLOAD_KEY_ALIAS) in Actions secrets"
             exit 1
           fi
           mkdir -p signing
-          echo "$KEYSTORE_BASE64" | base64 -d > signing/upload.jks
-          ALIAS="${KEY_ALIAS:-upload}"
+          STORE_PASSWORD="$(printf '%s' "$STORE_PASSWORD" | tr -d '\r\n')"
+          ALIAS="$(printf '%s' "${KEY_ALIAS:-upload}" | tr -d '\r\n')"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > signing/upload.jks
+          if [ ! -s signing/upload.jks ]; then
+            echo "::error::upload.jks empty after base64 decode; paste UPLOAD_KEYSTORE_BASE64 as one line without spaces"
+            exit 1
+          fi
+          KEYTOOL="${JAVA_HOME}/bin/keytool"
+          if ! "$KEYTOOL" -list -keystore signing/upload.jks -storepass "$STORE_PASSWORD" -alias "$ALIAS" >/dev/null 2>&1; then
+            echo "::error::Keystore password or alias mismatch. Use storePassword and keyAlias from local keystore.properties"
+            exit 1
+          fi
           {
             echo "storeFile=signing/upload.jks"
             echo "storePassword=${STORE_PASSWORD}"
             echo "keyAlias=${ALIAS}"
-            echo "keyPassword=${KEY_PASSWORD}"
+            echo "keyPassword=${STORE_PASSWORD}"
           } > keystore.properties
 
       - name: Build debug APK
