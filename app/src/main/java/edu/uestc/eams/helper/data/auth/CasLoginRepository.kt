@@ -468,33 +468,8 @@ class CasLoginRepository(
                 "会话未完成换票（JSESSIONID 无效）。$FALLBACK_ONLY_WEB",
             )
         }
-        val hdr = EamsAppCookie.composeFromJar(jar, jwt)
-        val probe = EamsAppApi(client).probeSessionDetail(hdr)
-        traceCas(
-            "verify: probe HTTP=${probe.httpCode} enc=${probe.contentEncoding.ifBlank { "—" }} " +
-                "ok=${probe.ok} authFail=${probe.authFailed} bodyLen=${probe.bodyPreview.length} " +
-                "preview=${probe.bodyPreview.take(120)}",
-        )
-        if (!probe.ok) {
-            val compressedHint =
-                probe.contentEncoding.contains("zstd", ignoreCase = true) ||
-                    probe.bodyPreview.any { it.code < 32 && it != '\n' && it != '\r' && it != '\t' }
-            throw IOException(
-                buildString {
-                    append("移动教务 API 探针失败（HTTP ${probe.httpCode}）")
-                    if (probe.authFailed) append("，会话已失效")
-                    if (compressedHint) {
-                        append("，响应似未解压（Content-Encoding=${probe.contentEncoding.ifBlank { "?" }}）")
-                    } else {
-                        val hint = probe.bodyPreview.take(80)
-                        if (hint.isNotEmpty()) append("：$hint")
-                    }
-                    append("。")
-                    append(FALLBACK_ONLY_WEB)
-                },
-            )
-        }
-        traceCas("verifyEamsAppApiSession OK jwtLen=${jwt.length}")
+        EamsAppCookie.composeFromJar(jar, jwt)
+        traceCas("verify: 已取得 JWT，登录阶段不调用 API 探针；回校网后请点刷新拉取数据")
     }
 
     /** 校验一网通门户页是否仍保持登录。 */

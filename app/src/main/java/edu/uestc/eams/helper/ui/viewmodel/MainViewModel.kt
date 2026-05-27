@@ -18,6 +18,7 @@ import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
+import edu.uestc.eams.helper.data.network.EamsFetchException
 import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
 import java.time.DayOfWeek
@@ -62,7 +63,7 @@ data class MainUiState(
 data class WakeUpImportPrompt(
     val fileText: String,
     val initialDate: LocalDate,
-    val semesterOpenDay: LocalDate,
+    /** 第 1 教学周内最早有课日，仅当文件已解析出第 1 周周一时可算。 */
     val firstClassDay: LocalDate?,
     val fromFile: Boolean,
 )
@@ -95,17 +96,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         reloadFromCache()
         viewModelScope.launch {
-            val ok = repo.probeSession()
-            val needLogin = !ok && _ui.value.courses.isEmpty() && !_ui.value.loginDeferred
+            val hasSession = repo.hasLocalSession()
+            val needLogin = !hasSession && _ui.value.courses.isEmpty() && !_ui.value.loginDeferred
             _ui.update { current ->
                 current.copy(
-                    loggedIn = ok,
-                    userProfile = if (ok) repo.cachedUserProfile() else null,
+                    loggedIn = hasSession,
+                    userProfile = if (hasSession) repo.cachedUserProfile() else null,
                     showLogin = needLogin,
                     contentLoading = false,
                 )
             }
-            if (ok && _ui.value.userProfile == null) {
+            if (hasSession && _ui.value.userProfile == null) {
                 viewModelScope.launch {
                     repo.refreshUserProfile().getOrNull()?.let { p ->
                         _ui.update { it.copy(userProfile = p) }
@@ -332,9 +333,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     },
                     onFailure = { e ->
                         if (generation != timetableWeekLoadGeneration) return@fold
-                        _ui.update {
-                            it.copy(message = e.message ?: "切换周次失败")
-                        }
+                        _ui.update { applyDataFetchFailure(it, e) }
                     },
                 )
             }
@@ -356,20 +355,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onHostResume() {
         viewModelScope.launch {
-            val ok = repo.probeSession()
+            val hasSession = repo.hasLocalSession()
             _ui.update { current ->
                 current.copy(
-                    loggedIn = ok,
-                    showLogin = !ok && current.courses.isEmpty() && !current.loginDeferred,
+                    loggedIn = hasSession,
+                    showLogin = !hasSession && current.courses.isEmpty() && !current.loginDeferred,
                     userProfile =
                         when {
-                            !ok -> null
+                            !hasSession -> null
                             current.userProfile != null -> current.userProfile
                             else -> repo.cachedUserProfile()
                         },
                 )
             }
-            if (ok && _ui.value.userProfile == null) {
+            if (hasSession && _ui.value.userProfile == null) {
                 repo.refreshUserProfile().getOrNull()?.let { p ->
                     _ui.update { it.copy(userProfile = p) }
                 }
@@ -379,7 +378,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshAll() {
         viewModelScope.launch {
-            val hasSession = repo.probeSession()
+            val hasSession = repo.hasLocalSession()
             val tab = _ui.value.selectedTab
             if (!hasSession) {
                 if (repo.isOfflineImported() && tab == 0) {
@@ -393,12 +392,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _ui.update {
                     it.copy(
-                        loggedIn = false,
                         message =
                             if (it.courses.isEmpty()) {
                                 "请先登录，或在 Web 中 [导入会话] 后点 [刷新]，或顶栏 [导入] 树维课表 HTML"
                             } else {
-                                "会话已失效，请重新登录或通过 Web [导入会话]"
+                                "暂无登录信息，点 [刷新] 将尝试使用已保存会话；失败时请重新登录或 Web 导入"
                             },
                     )
                 }
@@ -422,12 +420,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
                 onFailure = { e ->
-                    val msg = e.message ?: "刷新失败"
                     _ui.update {
-                        it.copy(
-                            contentLoading = false,
-                            message = msg,
-                            showLogin = msg.contains("登录"),
+                        applyDataFetchFailure(
+                            it.copy(contentLoading = false),
+                            e,
                         )
                     }
                 },
@@ -437,8 +433,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun refreshAllDataAfterLogin() {
         viewModelScope.launch {
-            val hasSession = repo.probeSession()
-            if (!hasSession) return@launch
+            if (!repo.hasLocalSession()) return@launch
             _ui.update { it.copy(contentLoading = true, message = null, loggedIn = true, showLogin = false) }
             repo.refreshAllAfterLogin().fold(
                 onSuccess = {
@@ -455,13 +450,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onFailure = { e ->
                     reloadFromCache()
                     _ui.update {
-                        it.copy(
-                            contentLoading = false,
-                            message = e.message ?: "部分数据同步失败",
+                        applyDataFetchFailure(
+                            it.copy(contentLoading = false),
+                            e,
                         )
                     }
                 },
             )
+        }
+    }
+
+    private fun applyDataFetchFailure(
+        state: MainUiState,
+        error: Throwable,
+    ): MainUiState {
+        val msg = error.message ?: "刷新失败"
+        return when (error) {
+            is EamsFetchException.OffCampus ->
+                state.copy(
+                    message = msg,
+                    loggedIn = state.loggedIn || repo.hasLocalSession(),
+                    showLogin = false,
+                )
+            is EamsFetchException.SessionInvalid ->
+                state.copy(
+                    message = msg,
+                    loggedIn = false,
+                    showLogin = true,
+                    userProfile = null,
+                )
+            else ->
+                state.copy(
+                    message = msg,
+                    loggedIn = state.loggedIn || repo.hasLocalSession(),
+                    showLogin = false,
+                )
         }
     }
 
@@ -575,13 +598,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         return@launch
                     }
-            val semesterOpen = WakeUpShuweiHtmlParser.suggestWeekOneMonday(parsed.year)
             val firstClass =
-                WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(parsed.courses, parsed.year)
-            val initial =
-                parsed.weekOneMonday
-                    ?: firstClass
-                    ?: semesterOpen
+                WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(
+                    parsed.courses,
+                    parsed.weekOneMonday,
+                )
+            val initial = parsed.weekOneMonday ?: firstClass ?: LocalDate.now()
             _ui.update {
                 it.copy(
                     contentLoading = false,
@@ -589,7 +611,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         WakeUpImportPrompt(
                             fileText = text,
                             initialDate = initial,
-                            semesterOpenDay = semesterOpen,
                             firstClassDay = firstClass,
                             fromFile = parsed.weekOneMonday != null,
                         ),

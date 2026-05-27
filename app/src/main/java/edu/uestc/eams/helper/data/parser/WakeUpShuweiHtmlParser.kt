@@ -67,36 +67,22 @@ object WakeUpShuweiHtmlParser {
                 ?: root.intField("beginDay")
                 ?: root.intField("startDay")
         if (month != null && day != null) {
-            val begin =
-                runCatching { LocalDate.of(y, month, day) }.getOrNull()
-                    ?: return suggestWeekOneMonday(y)
+            val begin = runCatching { LocalDate.of(y, month, day) }.getOrNull() ?: return null
             return begin.with(DayOfWeek.MONDAY)
         }
         return null
     }
 
-    /** 导入对话框默认：春季 3/2、秋季 9/1 所在周的周一。 */
-    fun suggestWeekOneMonday(year: Int?): LocalDate {
-        val y = year ?: LocalDate.now().year
-        val anchor =
-            if (LocalDate.now().monthValue >= 9) {
-                LocalDate.of(y, 9, 1)
-            } else {
-                LocalDate.of(y, 3, 2)
-            }
-        return anchor.with(DayOfWeek.MONDAY)
-    }
-
-    /** 第 1 教学周内最早有课的一天，用于导入时快捷填入。 */
+    /** 第 1 教学周内最早有课的一天；须已知第 1 教学周周一。 */
     fun suggestFirstClassDayInWeekOne(
         courses: List<UestcCourse>,
-        year: Int?,
+        weekOneMonday: LocalDate?,
     ): LocalDate? {
+        val anchor = weekOneMonday ?: return null
         val week1 = CourseWeekFilter.filterForWeek(courses, 1)
         if (week1.isEmpty()) return null
-        val monday = suggestWeekOneMonday(year)
         val minWeekday = week1.minOf { it.weekday }
-        return monday.plusDays((minWeekday - 1).toLong())
+        return anchor.plusDays((minWeekday - 1).toLong())
     }
 
     private fun parseDateText(text: String): LocalDate? {
