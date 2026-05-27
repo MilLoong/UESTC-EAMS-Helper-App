@@ -69,7 +69,6 @@ class WakeUpShuweiHtmlParserTest {
             """.trimIndent()
         val result = WakeUpShuweiHtmlParser.parse(json)
         assertEquals(null, result.weekOneMonday)
-        assertEquals(LocalDate.of(2026, 3, 2), WakeUpShuweiHtmlParser.suggestWeekOneMonday(2026))
     }
 
     @Test
@@ -87,7 +86,13 @@ class WakeUpShuweiHtmlParserTest {
             }
             """.trimIndent()
         val result = WakeUpShuweiHtmlParser.parse(json)
-        assertEquals(LocalDate.of(2026, 3, 3), WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(result.courses, 2026))
+        assertEquals(
+            LocalDate.of(2026, 3, 3),
+            WakeUpShuweiHtmlParser.suggestFirstClassDayInWeekOne(
+                result.courses,
+                LocalDate.of(2026, 3, 2),
+            ),
+        )
     }
 
     @Test

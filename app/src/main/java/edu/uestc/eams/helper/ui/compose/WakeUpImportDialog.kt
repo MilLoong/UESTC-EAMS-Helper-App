@@ -66,45 +66,27 @@ fun WakeUpImportDialog(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            dateState.selectedDateMillis =
-                                prompt.semesterOpenDay.atStartOfDay(zone).toInstant().toEpochMilli()
-                        },
-                        label = {
-                            Text(
-                                stringResource(
-                                    R.string.wakeup_import_preset_semester,
-                                    prompt.semesterOpenDay.format(dateLabelFmt),
-                                ),
-                            )
-                        },
-                        enabled = !loading,
-                    )
-                    prompt.firstClassDay?.let { firstDay ->
-                        if (firstDay != prompt.semesterOpenDay) {
-                            FilterChip(
-                                selected = false,
-                                onClick = {
-                                    dateState.selectedDateMillis =
-                                        firstDay.atStartOfDay(zone).toInstant().toEpochMilli()
-                                },
-                                label = {
-                                    Text(
-                                        stringResource(
-                                            R.string.wakeup_import_preset_first_class,
-                                            firstDay.format(dateLabelFmt),
-                                        ),
-                                    )
-                                },
-                                enabled = !loading,
-                            )
-                        }
+                prompt.firstClassDay?.let { firstDay ->
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                dateState.selectedDateMillis =
+                                    firstDay.atStartOfDay(zone).toInstant().toEpochMilli()
+                            },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        R.string.wakeup_import_preset_first_class,
+                                        firstDay.format(dateLabelFmt),
+                                    ),
+                                )
+                            },
+                            enabled = !loading,
+                        )
                     }
                 }
                 DatePicker(state = dateState, modifier = Modifier.fillMaxWidth())

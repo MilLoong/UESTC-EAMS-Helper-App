@@ -5,6 +5,7 @@ import edu.uestc.eams.helper.data.eamsapp.EamsAppApi
 import edu.uestc.eams.helper.data.eamsapp.EamsAppCookie
 import edu.uestc.eams.helper.data.eamsapp.EamsAppTicketConsumer
 import edu.uestc.eams.helper.data.local.AcademicCache
+import edu.uestc.eams.helper.data.network.EamsFetchException
 import edu.uestc.eams.helper.data.network.InMemoryCookieJar
 import edu.uestc.eams.helper.data.parser.ExamJsonParser
 import edu.uestc.eams.helper.data.parser.GradesJsonParser
@@ -36,6 +37,16 @@ class UestcRepository(
     private val api = EamsAppApi(client)
     private val ticketConsumer = EamsAppTicketConsumer(client, jar)
 
+    /** 本地是否已有移动教务 JWT，不发起网络请求。 */
+    fun hasLocalSession(): Boolean = cookieHeaderOrNull() != null
+
+    /** 清除本地 Cookie 与登录资料，不清课表/成绩缓存。 */
+    fun clearLoginSession() {
+        sessionStorage.clearJarAndPersistence(jar)
+        cache.clearUserProfile()
+    }
+
+    /** 联网探测会话是否仍有效；一般不再用于前台判断。 */
     suspend fun probeSession(): Boolean =
         withContext(Dispatchers.IO) {
             cookieHeaderOrNull()?.let { api.probeSession(it) } == true
@@ -67,15 +78,15 @@ class UestcRepository(
         week: Int? = null,
         forceNetwork: Boolean = false,
     ): Result<List<UestcCourse>> =
-        withContext(Dispatchers.IO) {
-            runCatching {
+        runUserDataFetch {
+            withContext(Dispatchers.IO) {
                 if (!forceNetwork && cache.isOfflineImported()) {
                     val meta =
                         cache.loadTimetableMeta()
                             ?: throw IllegalStateException("暂无导入课表")
                     val displayWeek = week?.coerceAtLeast(1) ?: meta.displayWeek
                     cache.saveTimetableMeta(meta.copy(displayWeek = displayWeek))
-                    return@runCatching cache.loadCourses()
+                    return@withContext cache.loadCourses()
                 }
                 val ck = ensureMobileCookieHeader()
                 val semester = api.fetchCurSemesterCode(ck) ?: "25262"
@@ -92,7 +103,7 @@ class UestcRepository(
                 if (!forceNetwork) {
                     cache.loadWeekCourses(semester, displayWeek)?.let {
                         cache.saveTimetableMeta(meta)
-                        return@runCatching cache.loadTimetableCoursesForUi()
+                        return@withContext cache.loadTimetableCoursesForUi()
                     }
                 }
 
@@ -111,28 +122,31 @@ class UestcRepository(
     fun hasCachedTimetableWeek(semesterCode: String, week: Int): Boolean =
         cache.hasWeekCourses(semesterCode, week)
 
-    /** 后台每日同步当前教学周课表，当日已同步则跳过。 */
+    /** 后台每日同步当前教学周课表：当日已同步且本地有缓存则不联网；无本地会话则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                if (!probeSession()) return@runCatching Unit
-                val ck = ensureMobileCookieHeader()
-                val semester = api.fetchCurSemesterCode(ck) ?: return@runCatching Unit
-                val currentWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching Unit
-                if (
-                    cache.wasWeekTimetableSyncedToday(semester, currentWeek) &&
-                    cache.hasWeekCourses(semester, currentWeek)
-                ) {
-                    return@runCatching Unit
+                val meta = cache.loadTimetableMeta()
+                if (meta != null) {
+                    val semester = meta.semesterCode
+                    val week = meta.currentWeek
+                    if (
+                        semester.isNotBlank() &&
+                        cache.wasWeekTimetableSyncedToday(semester, week) &&
+                        cache.hasWeekCourses(semester, week)
+                    ) {
+                        return@runCatching Unit
+                    }
                 }
-                refreshTimetable(week = currentWeek, forceNetwork = true).getOrThrow()
+                if (!hasLocalSession()) return@runCatching Unit
+                refreshTimetable(week = meta?.currentWeek, forceNetwork = true).getOrNull()
                 Unit
             }
         }
 
     suspend fun refreshGrades(): Result<GradesSummary> =
-        withContext(Dispatchers.IO) {
-            runCatching {
+        runUserDataFetch {
+            withContext(Dispatchers.IO) {
                 val ck = ensureMobileCookieHeader()
                 val code = api.resolveStudentCode(ck)
                 val json =
@@ -143,8 +157,8 @@ class UestcRepository(
         }
 
     suspend fun refreshExams(): Result<List<ExamItem>> =
-        withContext(Dispatchers.IO) {
-            runCatching {
+        runUserDataFetch {
+            withContext(Dispatchers.IO) {
                 val ck = ensureMobileCookieHeader()
                 val semester = api.fetchCurSemesterCode(ck) ?: "25262"
                 val json =
@@ -156,38 +170,34 @@ class UestcRepository(
 
     /** 登录成功后拉取资料、课表、成绩与考试。 */
     suspend fun refreshAllAfterLogin(): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val hdr = ensureMobileCookieHeader()
-                refreshUserProfile(hdr).getOrThrow()
-                refreshTimetable(forceNetwork = true).getOrThrow()
-                refreshGrades().getOrThrow()
-                refreshExams().getOrThrow()
-                Unit
-            }
+        runUserDataFetch {
+            val hdr = ensureMobileCookieHeader()
+            refreshUserProfile(hdr).getOrThrow()
+            refreshTimetable(forceNetwork = true).getOrThrow()
+            refreshGrades().getOrThrow()
+            refreshExams().getOrThrow()
+            Unit
         }
 
     /** 按当前 Tab 只刷新对应数据。 */
     suspend fun refreshForTab(tab: Int, timetableDisplayWeek: Int?): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                when (tab) {
-                    0 ->
-                        refreshTimetable(
-                            week = timetableDisplayWeek,
-                            forceNetwork = true,
-                        ).getOrThrow()
-                    1 -> refreshExams().getOrThrow()
-                    2 -> refreshGrades().getOrThrow()
-                    else -> refreshUserProfile().getOrThrow()
-                }
-                Unit
+        runUserDataFetch {
+            when (tab) {
+                0 ->
+                    refreshTimetable(
+                        week = timetableDisplayWeek,
+                        forceNetwork = true,
+                    ).getOrThrow()
+                1 -> refreshExams().getOrThrow()
+                2 -> refreshGrades().getOrThrow()
+                else -> refreshUserProfile().getOrThrow()
             }
+            Unit
         }
 
     suspend fun refreshUserProfile(cookieHeader: String? = null): Result<UserProfile> =
-        withContext(Dispatchers.IO) {
-            runCatching {
+        runUserDataFetch {
+            withContext(Dispatchers.IO) {
                 val hdr = cookieHeader ?: ensureMobileCookieHeader()
                 val jwtProfile =
                     api.profileFromJwt(hdr)
@@ -264,15 +274,23 @@ class UestcRepository(
     }
 
     private fun ensureMobileCookieHeader(): String {
-        cookieHeaderOrNull()?.let { hdr ->
-            if (api.probeSession(hdr)) return hdr
-        }
-        val jwt = ticketConsumer.ensureJwtAfterCas()
-            ?: throw IllegalStateException("未建立移动教务会话，请先登录。")
+        cookieHeaderOrNull()?.let { return it }
+        val jwt =
+            ticketConsumer.ensureJwtAfterCas()
+                ?: throw IllegalStateException("未建立移动教务会话，请先登录。")
         val hdr = EamsAppCookie.composeFromJar(jar, jwt)
-        if (!api.probeSession(hdr)) {
-            throw IllegalStateException("移动教务会话无效或已过期，请重新登录。")
-        }
+        sessionStorage.persistFromJar(jar)
         return hdr
     }
+
+    private suspend fun <T> runUserDataFetch(block: suspend () -> T): Result<T> =
+        try {
+            Result.success(block())
+        } catch (e: Throwable) {
+            val mapped = UserDataFetchErrors.map(e)
+            if (mapped is EamsFetchException.SessionInvalid) {
+                clearLoginSession()
+            }
+            Result.failure(mapped)
+        }
 }
