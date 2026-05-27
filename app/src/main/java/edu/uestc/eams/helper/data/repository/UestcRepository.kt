@@ -240,13 +240,15 @@ class UestcRepository(
                         displayWeek = currentWeek.coerceIn(1, parsed.maxWeek),
                         weekOneMonday = weekOneMonday.toString(),
                     )
-                cache.saveCourses(parsed.courses)
-                cache.saveTimetableMeta(meta)
+                // 先切到导入学期（会清掉在线周缓存），再写入课表，避免 saveWeekCourses 中途清空刚写入的 courses
+                cache.ensureWeekCacheSemester(AcademicCache.IMPORT_SEMESTER)
                 cache.setOfflineImported(true)
+                cache.saveTimetableMeta(meta)
                 for (w in 1..parsed.maxWeek) {
                     val weekCourses = CourseWeekFilter.filterForWeek(parsed.courses, w)
                     cache.saveWeekCourses(AcademicCache.IMPORT_SEMESTER, w, weekCourses)
                 }
+                cache.saveCourses(parsed.courses)
                 parsed.courses.size
             }
         }
