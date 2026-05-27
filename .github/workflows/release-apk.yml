@@ -3,6 +3,8 @@
 #
 # 一次性配置：在源码仓库 Settings → Secrets → Actions 添加
 #   RELEASE_REPO_TOKEN = 对 UESTC-EAMS-Helper-App 有 repo 权限的 PAT
+#   UPLOAD_KEYSTORE_BASE64 / UPLOAD_STORE_PASSWORD / UPLOAD_KEY_PASSWORD / UPLOAD_KEY_ALIAS
+#   见仓库根目录 keystore.properties.example
 #
 # 日常发布：
 #   1. 改 app/build.gradle.kts 的 versionCode / versionName
@@ -84,6 +86,27 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Configure UPLOAD_KEYSTORE_BASE64, UPLOAD_STORE_PASSWORD, UPLOAD_KEY_PASSWORD (and UPLOAD_KEY_ALIAS) in Actions secrets"
+            exit 1
+          fi
+          mkdir -p signing
+          echo "$KEYSTORE_BASE64" | base64 -d > signing/upload.jks
+          ALIAS="${KEY_ALIAS:-upload}"
+          {
+            echo "storeFile=signing/upload.jks"
+            echo "storePassword=${STORE_PASSWORD}"
+            echo "keyAlias=${ALIAS}"
+            echo "keyPassword=${KEY_PASSWORD}"
+          } > keystore.properties
 
       - name: Build debug APK
         # 用 bash 调用，避免 Windows 提交的 gradlew 在 Linux 上无 +x 导致 Permission denied
