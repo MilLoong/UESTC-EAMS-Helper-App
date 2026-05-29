@@ -3,6 +3,7 @@ package edu.uestc.eams.helper.data.parser
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import edu.uestc.eams.helper.domain.model.GradeItem
+import edu.uestc.eams.helper.domain.model.GradeScorePart
 import edu.uestc.eams.helper.domain.model.GradesSummary
 
 object GradesJsonParser {
@@ -66,8 +67,24 @@ object GradesJsonParser {
             necessary = necessary,
             courseCode = code,
             passed = passed,
+            scoreParts = parseScoreParts(o),
         )
     }
+
+    private fun parseScoreParts(o: JsonObject): List<GradeScorePart> =
+        listOf(
+            "psScore" to "平时",
+            "qmScore" to "期末",
+            "qzScore" to "期中",
+            "syScore" to "实验",
+            "bkScore" to "补考",
+            "hkscore" to "缓考",
+            "bkZpscore" to "补考总评",
+            "zpScore" to "总评",
+        ).mapNotNull { (key, label) ->
+            val v = pick(o, key)?.trim().orEmpty()
+            if (v.isEmpty()) null else GradeScorePart(label, v)
+        }
 
     private fun pick(o: JsonObject, vararg keys: String): String? {
         for (k in keys) {

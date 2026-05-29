@@ -30,6 +30,11 @@ data class ExamItem(
     }
 }
 
+data class GradeScorePart(
+    val label: String,
+    val value: String,
+)
+
 data class GradeItem(
     val courseName: String,
     val score: String,
@@ -41,6 +46,7 @@ data class GradeItem(
     val necessary: String = "",
     val courseCode: String = "",
     val passed: Boolean? = null,
+    val scoreParts: List<GradeScorePart> = emptyList(),
 )
 
 data class GradesSummary(

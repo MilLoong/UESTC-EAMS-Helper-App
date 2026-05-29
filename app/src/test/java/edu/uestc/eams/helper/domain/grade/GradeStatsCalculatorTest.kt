@@ -22,6 +22,13 @@ class GradeStatsCalculatorTest {
     }
 
     @Test
+    fun pass_grade_p_counts_as_85_for_average_score() {
+        val item = grade("体育", "1", "P", "3.0")
+        val keys = setOf(GradeStatsCalculator.stableKey(item))
+        assertEquals(85.0, GradeStatsCalculator.averageScore(listOf(item), keys).value!!, 0.01)
+    }
+
+    @Test
     fun skips_non_numeric_score() {
         val item = grade("体育", "1", "良好", "3.0")
         val keys = setOf(GradeStatsCalculator.stableKey(item))

@@ -17,7 +17,7 @@ object GradeStatsCalculator {
         weightedMean(
             items = items,
             selectedKeys = selectedKeys,
-            valueOf = { parseNumber(it.score) },
+            valueOf = { parseScoreValue(it.score) },
         )
 
     fun averageGpa(items: List<GradeItem>, selectedKeys: Set<String>): Stat =
@@ -49,6 +49,14 @@ object GradeStatsCalculator {
             courseCount = count,
             creditSum = credits,
         )
+    }
+
+    fun parseScoreValue(raw: String): Double? {
+        parseNumber(raw)?.let { return it }
+        return when (raw.trim().uppercase()) {
+            "P" -> 85.0
+            else -> null
+        }
     }
 
     fun parseNumber(raw: String): Double? {

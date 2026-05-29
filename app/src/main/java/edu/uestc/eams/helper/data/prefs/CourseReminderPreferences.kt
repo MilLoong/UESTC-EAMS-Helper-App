@@ -22,12 +22,8 @@ class CourseReminderPreferences(context: Context) {
     companion object {
         const val DEFAULT_LEAD_MINUTES = 20
         const val MIN_LEAD_MINUTES = 10
-        const val MINUTES_PER_DAY = 24 * 60
-        const val MAX_LEAD_MINUTES = MINUTES_PER_DAY
-
-        val presetMinutes: List<Int> =
-            listOf(10, 15, 20, 30, 60, 120, 360, 720, MINUTES_PER_DAY)
-                .filter { it in MIN_LEAD_MINUTES..MAX_LEAD_MINUTES }
+        const val MAX_LEAD_MINUTES = 24 * 60
+        const val MINUTES_PER_DAY = MAX_LEAD_MINUTES
 
         fun formatLeadLabel(minutes: Int): String =
             when {
