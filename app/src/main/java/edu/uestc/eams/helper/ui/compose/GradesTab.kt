@@ -57,7 +57,7 @@ fun GradesTab(
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
-                    "按学分加权；非数字成绩或绩点不计入。均分与均绩可分别勾选课程。",
+                    "按学分加权；P 按 85 分计均分；其他非数字成绩不计入均分。均分与均绩可分别勾选课程。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                     modifier = Modifier.padding(top = 6.dp),
@@ -90,6 +90,14 @@ fun GradesTab(
                     ).joinToString(" · ")
                 if (meta.isNotBlank()) {
                     Text(meta, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 2.dp))
+                }
+                if (g.scoreParts.isNotEmpty()) {
+                    Text(
+                        g.scoreParts.joinToString("  ") { "${it.label} ${it.value}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
                 Text(
                     "成绩 ${g.score}  学分 ${g.credit}  绩点 ${g.gradePoint}",

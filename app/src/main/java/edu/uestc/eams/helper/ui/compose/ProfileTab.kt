@@ -4,36 +4,43 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import edu.uestc.eams.helper.AppLinks
 import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
 import edu.uestc.eams.helper.domain.model.UserProfile
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileTab(
     loggedIn: Boolean,
@@ -47,6 +54,18 @@ fun ProfileTab(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    var reminderDraft by rememberSaveable { mutableStateOf(reminderLeadMinutes.toString()) }
+
+    LaunchedEffect(reminderLeadMinutes) {
+        reminderDraft = reminderLeadMinutes.toString()
+    }
+
+    fun applyReminderDraft() {
+        val minutes = reminderDraft.trim().toIntOrNull() ?: return
+        onReminderLeadMinutesChange(minutes)
+        focusManager.clearFocus()
+    }
     Column(
         modifier
             .fillMaxSize()
@@ -92,18 +111,31 @@ fun ProfileTab(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            FlowRow(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CourseReminderPreferences.presetMinutes.forEach { minutes ->
-                    FilterChip(
-                        selected = reminderLeadMinutes == minutes,
-                        onClick = { onReminderLeadMinutesChange(minutes) },
-                        label = { Text(CourseReminderPreferences.formatLeadLabel(minutes)) },
+            OutlinedTextField(
+                value = reminderDraft,
+                onValueChange = { reminderDraft = it.filter { ch -> ch.isDigit() } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                label = { Text("提前分钟数") },
+                supportingText = {
+                    Text(
+                        "范围 ${CourseReminderPreferences.MIN_LEAD_MINUTES}～${CourseReminderPreferences.MAX_LEAD_MINUTES} 分钟（最长 1 天）",
                     )
-                }
+                },
+                singleLine = true,
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                    ),
+                keyboardActions = KeyboardActions(onDone = { applyReminderDraft() }),
+            )
+            TextButton(
+                onClick = { applyReminderDraft() },
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text("保存提前时间（当前 ${CourseReminderPreferences.formatLeadLabel(reminderLeadMinutes)}）")
             }
         }
 
