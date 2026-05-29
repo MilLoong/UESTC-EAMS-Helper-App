@@ -43,6 +43,15 @@ object UestcPeriodTime {
         return day.atTime(time).atZone(ZoneId.systemDefault()).toEpochSecond()
     }
 
+    fun startEpochSecOnDate(course: UestcCourse, date: LocalDate): Long? {
+        if (course.weekday != date.dayOfWeek.value) return null
+        val time =
+            parseClock(course.startTime)
+                ?: slots.getOrNull(course.period - 1)?.start?.let { parseClock(it) }
+                ?: LocalTime.of(8, 30)
+        return date.atTime(time).atZone(ZoneId.systemDefault()).toEpochSecond()
+    }
+
     fun endEpochSec(course: UestcCourse, weekAnchor: LocalDate = weekAnchor()): Long {
         val day = weekAnchor.plusDays((course.weekday - 1).coerceIn(0, 6).toLong())
         val time =

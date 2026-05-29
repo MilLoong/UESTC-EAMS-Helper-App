@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import edu.uestc.eams.helper.data.local.AcademicCache
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
+import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
 import java.time.LocalDate
 
@@ -21,18 +22,19 @@ class CourseNotificationWorker(
 
         val leadSec = CourseReminderPreferences(applicationContext).leadSeconds
         val nowSec = System.currentTimeMillis() / 1000
-        val anchor = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
-        val todayDow = LocalDate.now().dayOfWeek.value
+        val today = LocalDate.now()
+        val scanDates = listOf(today, today.plusDays(1))
 
-        var bestCourse: edu.uestc.eams.helper.domain.model.UestcCourse? = null
+        var bestCourse: UestcCourse? = null
         var bestDelta = Long.MAX_VALUE
-        for (c in courses) {
-            if (c.weekday != todayDow) continue
-            val start = UestcPeriodTime.startEpochSec(c, anchor)
-            val delta = start - nowSec
-            if (delta in 1..leadSec && delta < bestDelta) {
-                bestDelta = delta
-                bestCourse = c
+        for (date in scanDates) {
+            for (c in courses) {
+                val start = UestcPeriodTime.startEpochSecOnDate(c, date) ?: continue
+                val delta = start - nowSec
+                if (delta in 1..leadSec && delta < bestDelta) {
+                    bestDelta = delta
+                    bestCourse = c
+                }
             }
         }
 

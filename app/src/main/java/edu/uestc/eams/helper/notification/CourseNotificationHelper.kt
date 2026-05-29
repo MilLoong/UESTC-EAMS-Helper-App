@@ -43,7 +43,7 @@ object CourseNotificationHelper {
         val lead = CourseReminderPreferences(context).leadMinutes
         val ch =
             NotificationChannel(CHANNEL_ID, "上课提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "开课前 $lead 分钟内提醒"
+                description = "开课前 ${CourseReminderPreferences.formatLeadLabel(lead)} 内提醒"
             }
         nm.createNotificationChannel(ch)
     }

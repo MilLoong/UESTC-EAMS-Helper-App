@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import edu.uestc.eams.helper.domain.model.ExamItem
-import edu.uestc.eams.helper.domain.model.GradeItem
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -57,50 +56,6 @@ fun ExamTab(exams: List<ExamItem>, modifier: Modifier = Modifier) {
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun GradesTab(grades: List<GradeItem>, modifier: Modifier = Modifier) {
-    if (grades.isEmpty()) {
-        EmptyHint("暂无成绩数据\n点顶栏刷新获取", modifier)
-        return
-    }
-    LazyColumn(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(grades, key = { "${it.courseCode}|${it.semester}|${it.courseName}" }) { g ->
-            GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
-                Text(g.courseName, fontWeight = FontWeight.SemiBold)
-                val meta =
-                    listOfNotNull(
-                        g.semester.takeIf { it.isNotBlank() },
-                        g.courseType.takeIf { it.isNotBlank() },
-                        g.necessary.takeIf { it.isNotBlank() },
-                    ).joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Text(meta, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 2.dp))
-                }
-                Text(
-                    "成绩 ${g.score}  学分 ${g.credit}  绩点 ${g.gradePoint}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (g.examMode.isNotBlank()) {
-                    Text("考核：${g.examMode}", style = MaterialTheme.typography.bodySmall)
-                }
-                g.passed?.let { ok ->
-                    Text(
-                        if (ok) "已通过" else "未通过",
-                        style = MaterialTheme.typography.bodySmall,
-                        color =
-                            if (ok) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                    )
                 }
             }
         }
