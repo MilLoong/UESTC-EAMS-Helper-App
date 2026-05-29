@@ -8,11 +8,13 @@ import androidx.lifecycle.viewModelScope
 import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.EamsHelperApp
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
+import edu.uestc.eams.helper.data.prefs.GradeSelectionPreferences
 import edu.uestc.eams.helper.data.update.AppUpdateChecker
 import edu.uestc.eams.helper.data.update.UpdateReminderStorage
 import edu.uestc.eams.helper.data.auth.CasLoginRepository
 import edu.uestc.eams.helper.data.auth.ReauthSmsSendOutcome
 import edu.uestc.eams.helper.data.auth.LoginUserMessages
+import edu.uestc.eams.helper.domain.grade.GradeStatsCalculator
 import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.TimetableMeta
@@ -54,6 +56,8 @@ data class MainUiState(
     val userProfile: UserProfile? = null,
     val updatePrompt: UpdatePrompt? = null,
     val reminderLeadMinutes: Int = CourseReminderPreferences.DEFAULT_LEAD_MINUTES,
+    val gradeKeysForAverage: Set<String> = emptySet(),
+    val gradeKeysForGpa: Set<String> = emptySet(),
     val wakeUpImportPrompt: WakeUpImportPrompt? = null,
     /** 顶栏切周时让 Pager 滚到该周；消费后清空。 */
     val timetablePagerScrollWeek: Int? = null,
@@ -82,6 +86,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val updateChecker = AppUpdateChecker()
     private val updateStorage = UpdateReminderStorage(application)
     private val reminderPrefs = CourseReminderPreferences(application)
+    private val gradeSelectionPrefs = GradeSelectionPreferences(application)
     private val _ui =
         MutableStateFlow(
             MainUiState(reminderLeadMinutes = CourseReminderPreferences(application).leadMinutes),
@@ -656,12 +661,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setReminderLeadMinutes(minutes: Int) {
-        val clamped = minutes.coerceIn(CourseReminderPreferences.MIN_LEAD, CourseReminderPreferences.MAX_LEAD)
+        val clamped =
+            minutes.coerceIn(
+                CourseReminderPreferences.MIN_LEAD_MINUTES,
+                CourseReminderPreferences.MAX_LEAD_MINUTES,
+            )
         reminderPrefs.leadMinutes = clamped
         _ui.update {
             it.copy(
                 reminderLeadMinutes = clamped,
-                message = "已设置：开课前 $clamped 分钟内提醒",
+                message = "已设置：开课前 ${CourseReminderPreferences.formatLeadLabel(clamped)} 内提醒",
             )
         }
     }
@@ -681,16 +690,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleGradeForAverage(key: String) {
+        val next =
+            _ui.value.gradeKeysForAverage.toMutableSet().apply {
+                if (!add(key)) remove(key)
+            }
+        gradeSelectionPrefs.saveAverageKeys(next)
+        _ui.update { it.copy(gradeKeysForAverage = next) }
+    }
+
+    fun toggleGradeForGpa(key: String) {
+        val next =
+            _ui.value.gradeKeysForGpa.toMutableSet().apply {
+                if (!add(key)) remove(key)
+            }
+        gradeSelectionPrefs.saveGpaKeys(next)
+        _ui.update { it.copy(gradeKeysForGpa = next) }
+    }
+
+    fun setAllGradesForAverage(selected: Boolean) {
+        val keys =
+            if (selected) {
+                _ui.value.grades.map { GradeStatsCalculator.stableKey(it) }.toSet()
+            } else {
+                emptySet()
+            }
+        gradeSelectionPrefs.saveAverageKeys(keys)
+        _ui.update { it.copy(gradeKeysForAverage = keys) }
+    }
+
+    fun setAllGradesForGpa(selected: Boolean) {
+        val keys =
+            if (selected) {
+                _ui.value.grades.map { GradeStatsCalculator.stableKey(it) }.toSet()
+            } else {
+                emptySet()
+            }
+        gradeSelectionPrefs.saveGpaKeys(keys)
+        _ui.update { it.copy(gradeKeysForGpa = keys) }
+    }
+
+    private fun syncGradeSelections(grades: List<GradeItem>): GradeSelectionPreferences.GradeSelectionState {
+        val keys = grades.map { GradeStatsCalculator.stableKey(it) }.toSet()
+        return gradeSelectionPrefs.syncWithCurrentGrades(keys, grades)
+    }
+
     private fun reloadFromCache() {
         val courses = repo.cachedCourses()
         val meta = repo.cachedTimetableMeta()
+        val grades = repo.cachedGrades()
+        val gradeSelection = syncGradeSelections(grades)
         _ui.update {
             it.copy(
                 courses = courses,
                 timetableMeta = meta,
                 exams = repo.cachedExams(),
-                grades = repo.cachedGrades(),
+                grades = grades,
                 userProfile = repo.cachedUserProfile(),
+                gradeKeysForAverage = gradeSelection.averageKeys,
+                gradeKeysForGpa = gradeSelection.gpaKeys,
                 contentLoading = false,
             )
         }

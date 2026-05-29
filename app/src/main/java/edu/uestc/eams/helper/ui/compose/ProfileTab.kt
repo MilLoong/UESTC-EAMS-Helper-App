@@ -82,7 +82,7 @@ fun ProfileTab(
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("上课提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "在距开课 1～$reminderLeadMinutes 分钟内发送通知（后台约每 15 分钟检查）",
+                "在距开课 1～${CourseReminderPreferences.formatLeadLabel(reminderLeadMinutes)} 内发送通知（可选 ${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MIN_LEAD_MINUTES)}～${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MAX_LEAD_MINUTES)}，后台约每 15 分钟检查当天与次日课表）",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 modifier = Modifier.padding(top = 6.dp),
@@ -101,7 +101,7 @@ fun ProfileTab(
                     FilterChip(
                         selected = reminderLeadMinutes == minutes,
                         onClick = { onReminderLeadMinutesChange(minutes) },
-                        label = { Text("${minutes} 分钟") },
+                        label = { Text(CourseReminderPreferences.formatLeadLabel(minutes)) },
                     )
                 }
             }
@@ -111,7 +111,7 @@ fun ProfileTab(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("调试", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "试发通知正文与正式提醒一致，格式为 [提前 $reminderLeadMinutes 分钟]",
+                    "试发通知正文与正式提醒一致，格式为 [提前 ${CourseReminderPreferences.formatLeadLabel(reminderLeadMinutes)}]",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     modifier = Modifier.padding(top = 6.dp),

@@ -184,7 +184,17 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         onPagerScrollConsumed = { viewModel.consumeTimetablePagerScroll() },
                     )
                 1 -> ExamTab(state.exams, Modifier.fillMaxSize())
-                2 -> GradesTab(state.grades, Modifier.fillMaxSize())
+                2 ->
+                    GradesTab(
+                        grades = state.grades,
+                        averageKeys = state.gradeKeysForAverage,
+                        gpaKeys = state.gradeKeysForGpa,
+                        onToggleAverage = { viewModel.toggleGradeForAverage(it) },
+                        onToggleGpa = { viewModel.toggleGradeForGpa(it) },
+                        onSelectAllAverage = { viewModel.setAllGradesForAverage(it) },
+                        onSelectAllGpa = { viewModel.setAllGradesForGpa(it) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 else ->
                     ProfileTab(
                         loggedIn = state.loggedIn,
