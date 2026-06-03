@@ -1,5 +1,6 @@
 package edu.uestc.eams.helper.data.mapper
 
+import edu.uestc.eams.helper.data.parser.TeachingWeekEstimator
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -17,8 +18,8 @@ object TimetableWeekCalendar {
         weekOneMonday?.let { anchor ->
             return anchor.plusWeeks((displayWeek - 1).toLong())
         }
-        val thisMonday = today.with(DayOfWeek.MONDAY)
-        return thisMonday.plusWeeks((displayWeek - currentWeek).toLong())
+        val anchorMonday = TeachingWeekEstimator.teachingWeekMonday(today)
+        return anchorMonday.plusWeeks((displayWeek - currentWeek).toLong())
     }
 
     fun dateForWeekday(weekMonday: LocalDate, weekday: Int): LocalDate =

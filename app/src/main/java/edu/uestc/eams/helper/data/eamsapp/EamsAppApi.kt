@@ -49,7 +49,7 @@ class EamsAppApi(private val client: OkHttpClient) {
         val url = "${ApiConstants.EAMSAPP_ORIGIN}/api/ydzc-app/semester/getCurWeek?code=$q"
         val (_, body) = get(url, cookieHeader)
         val root = BladeJson.parseApiBody(body) ?: return null
-        return BladeJson.firstWeekInt(BladeJson.unwrapRoot(root))
+        return BladeJson.parseCurWeek(BladeJson.unwrapRoot(root))
     }
 
     fun fetchWeekTimetableJson(

@@ -7,6 +7,19 @@ import java.time.temporal.ChronoUnit
 /** 按学年与开学日估算当前教学周。 */
 object TeachingWeekEstimator {
 
+    /**
+     * 用于周次与日期对齐的「本周周一」。
+     * 周日按移动教务惯例计入下一教学周（与 getCurWeek 在新周首日一致）。
+     */
+    fun teachingWeekMonday(today: LocalDate): LocalDate =
+        when (today.dayOfWeek) {
+            DayOfWeek.SUNDAY -> today.plusDays(1)
+            else -> today.with(DayOfWeek.MONDAY)
+        }
+
+    fun weekOneMondayForCurrentWeek(currentWeek: Int, today: LocalDate = LocalDate.now()): LocalDate =
+        teachingWeekMonday(today).minusWeeks((currentWeek - 1).coerceAtLeast(0).toLong())
+
     fun estimate(
         academicYear: Int?,
         maxWeek: Int,
@@ -30,8 +43,8 @@ object TeachingWeekEstimator {
         maxWeek: Int,
     ): Int {
         if (today.isBefore(weekOneMonday)) return 1
-        val thisMonday = today.with(DayOfWeek.MONDAY)
-        val weeks = ChronoUnit.WEEKS.between(weekOneMonday, thisMonday) + 1
+        val anchorMonday = teachingWeekMonday(today)
+        val weeks = ChronoUnit.WEEKS.between(weekOneMonday, anchorMonday) + 1
         return weeks.toInt().coerceIn(1, maxWeek)
     }
 
