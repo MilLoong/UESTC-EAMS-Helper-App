@@ -16,15 +16,17 @@ import edu.uestc.eams.helper.MainActivity
 import edu.uestc.eams.helper.R
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
+import edu.uestc.eams.helper.data.prefs.CourseReminderSentPreferences
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
+import java.time.LocalDate
 
 object CourseNotificationHelper {
 
     /** v2：提高重要性并默认震动，避免旧渠道在系统里被设为「仅静默通知」。 */
     const val CHANNEL_ID = "class_reminder_v2"
-    private const val NOTIFY_ID = 42001
-    private const val DEBUG_NOTIFY_ID = 42002
+    private const val NOTIFY_ID_BASE = 42_001
+    private const val DEBUG_NOTIFY_ID = 42_002
 
     enum class PreviewResult {
         Sent,
@@ -53,10 +55,29 @@ object CourseNotificationHelper {
         nm.createNotificationChannel(ch)
     }
 
+    fun reminderKey(course: UestcCourse, date: LocalDate): String =
+        listOf(
+            date.toString(),
+            course.weekday.toString(),
+            course.period.toString(),
+            course.endPeriod.toString(),
+            course.courseName,
+            course.lessonNo,
+            course.room,
+        ).joinToString("|")
+
+    fun notifyIdForKey(reminderKey: String): Int =
+        (NOTIFY_ID_BASE + reminderKey.hashCode() % 8000).let { id ->
+            if (id == DEBUG_NOTIFY_ID) id + 1 else id
+        }
+
+    /**
+     * @return true 已展示；false 无权限或今日已发过同一条
+     */
     fun showClassReminder(
         context: Context,
-        courseName: String,
-        room: String,
+        course: UestcCourse,
+        date: LocalDate,
         minutesUntil: Int? = null,
         startTime: String = "",
         debug: Boolean = false,
@@ -64,18 +85,29 @@ object CourseNotificationHelper {
         if (!hasPostNotificationPermission(context)) return false
         ensureChannel(context)
 
-        val title = buildTitle(courseName, debug)
-        val body = buildBody(room, minutesUntil, startTime, debug)
+        val reminderKey = reminderKey(course, date)
+        if (!debug) {
+            val sent = CourseReminderSentPreferences(context)
+            if (sent.wasSentToday(reminderKey)) return false
+        }
+
+        val courseName = course.courseName.ifBlank { "（课程）" }
+        val room = course.room.ifBlank { "[教室待定]" }
+        val timing = buildTimingLine(minutesUntil, startTime, debug)
+        val title = if (debug) "[调试] 上课提醒" else "上课提醒"
+        val collapsedText = "$timing\n$courseName"
+        val expandedText = "$timing\n$courseName\n教室：$room"
 
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(CourseNotificationWorker.EXTRA_OPEN_TAB, 0)
             }
+        val notifyId = if (debug) DEBUG_NOTIFY_ID else notifyIdForKey(reminderKey)
         val pi =
             PendingIntent.getActivity(
                 context,
-                if (debug) 1 else 0,
+                notifyId,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -84,35 +116,38 @@ object CourseNotificationHelper {
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
-                .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setContentText(collapsedText)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(expandedText)
+                        .setBigContentTitle(courseName),
+                )
                 .setContentIntent(pi)
-                .setAutoCancel(true)
+                .setAutoCancel(false)
+                .setOnlyAlertOnce(true)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(
-            if (debug) DEBUG_NOTIFY_ID else NOTIFY_ID,
-            notification,
-        )
+        NotificationManagerCompat.from(context).notify(notifyId, notification)
+        if (!debug) {
+            CourseReminderSentPreferences(context).markSentToday(reminderKey)
+        }
         return true
     }
 
-    /** 调试用：随机一门课预览通知样式。 */
     fun showPreview(context: Context, courses: List<UestcCourse>): PreviewResult {
         val pool = courses.filter { it.courseName.isNotBlank() }
         if (pool.isEmpty()) return PreviewResult.NoCourses
         val sample = pool.random()
-        val room = sample.room.ifBlank { "[教室待定]" }
         val leadMinutes = CourseReminderPreferences(context).leadMinutes
         val sent =
             showClassReminder(
                 context = context,
-                courseName = sample.courseName,
-                room = room,
+                course = sample,
+                date = LocalDate.now(),
                 minutesUntil = leadMinutes,
                 startTime = UestcPeriodTime.resolvedStartTime(sample),
                 debug = true,
@@ -120,33 +155,24 @@ object CourseNotificationHelper {
         return if (sent) PreviewResult.Sent else PreviewResult.NoPermission
     }
 
-    private fun buildTitle(courseName: String, debug: Boolean): String {
-        val prefix = if (debug) "[调试] " else ""
-        return "${prefix}📌 上课提醒：$courseName 即将开始！"
-    }
-
-    private fun buildBody(
-        room: String,
+    private fun buildTimingLine(
         minutesUntil: Int?,
         startTime: String,
         debug: Boolean,
     ): String {
-        val loc = room.trim().ifEmpty { "[教室待定]" }
         val clock = startTime.trim()
-        val timing =
-            when {
-                debug && minutesUntil != null && minutesUntil > 0 -> {
-                    val lead = "[提前 $minutesUntil 分钟]"
-                    if (clock.isNotEmpty()) "$lead $clock" else lead
-                }
-                minutesUntil != null && minutesUntil > 0 -> {
-                    val countdown = "${minutesUntil} 分钟后开始"
-                    if (clock.isNotEmpty()) "$countdown $clock" else countdown
-                }
-                minutesUntil == 0 -> if (clock.isNotEmpty()) "$clock 马上开始" else "马上开始"
-                clock.isNotEmpty() -> "$clock 即将开始"
-                else -> "即将开始"
+        return when {
+            debug && minutesUntil != null && minutesUntil > 0 -> {
+                val lead = "提前 $minutesUntil 分钟"
+                if (clock.isNotEmpty()) "$lead · $clock" else lead
             }
-        return "$timing\n教室：$loc"
+            minutesUntil != null && minutesUntil > 0 -> {
+                val countdown = "$minutesUntil 分钟后开始"
+                if (clock.isNotEmpty()) "$countdown · $clock" else countdown
+            }
+            minutesUntil == 0 -> if (clock.isNotEmpty()) "$clock 马上开始" else "马上开始"
+            clock.isNotEmpty() -> "$clock 即将开始"
+            else -> "即将开始"
+        }
     }
 }

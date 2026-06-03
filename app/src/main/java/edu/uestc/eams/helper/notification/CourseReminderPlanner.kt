@@ -11,7 +11,11 @@ import java.time.LocalDate
 /** 从本地课表缓存中挑选即将开课、且属于指定教学周的一条课程。 */
 object CourseReminderPlanner {
 
-    data class Upcoming(val course: UestcCourse, val secondsUntilStart: Long)
+    data class Upcoming(
+        val course: UestcCourse,
+        val date: LocalDate,
+        val secondsUntilStart: Long,
+    )
 
     fun findUpcoming(
         cache: AcademicCache,
@@ -30,7 +34,7 @@ object CourseReminderPlanner {
                 val delta = start - nowEpochSec
                 if (delta in 1..leadSeconds) {
                     if (best == null || delta < best.secondsUntilStart) {
-                        best = Upcoming(course, delta)
+                        best = Upcoming(course, date, delta)
                     }
                 }
             }
