@@ -20,6 +20,18 @@ class BladeJsonTest {
     }
 
     @Test
+    fun parseCurWeek_ignores_week_one_placeholder() {
+        val json =
+            """
+            {
+              "week": 1,
+              "curWeek": 14
+            }
+            """.trimIndent()
+        assertEquals(14, BladeJson.parseCurWeek(JsonParser.parseString(json)))
+    }
+
+    @Test
     fun parseCurWeek_reads_nested_curWeek_before_week() {
         val json =
             """

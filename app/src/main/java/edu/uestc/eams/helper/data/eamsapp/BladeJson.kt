@@ -104,11 +104,15 @@ object BladeJson {
         }
         if (element.isJsonObject) {
             val o = element.asJsonObject
-            for (k in listOf("curWeek", "currentWeek", "cur_week", "weekNum", "weekNo", "week")) {
+            for (k in listOf("curWeek", "currentWeek", "cur_week", "weekNum", "weekNo")) {
                 o.get(k)?.let { v ->
                     weekIntFromPrimitive(v, lo, hi)?.let { return it }
                     parseCurWeek(v, lo, hi)?.let { return it }
                 }
+            }
+            // 泛化 week 仅在本对象无 curWeek 时读取，且跳过 1（常为「第 1 周」占位而非当前周）
+            o.get("week")?.let { v ->
+                weekIntFromPrimitive(v, lo, hi)?.takeIf { it > 1 }?.let { return it }
             }
             o.entrySet().forEach { (_, v) ->
                 parseCurWeek(v, lo, hi)?.let { return it }

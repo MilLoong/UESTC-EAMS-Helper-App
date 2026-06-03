@@ -54,7 +54,8 @@ class AcademicCache(context: Context) {
     fun saveWeekCourses(semesterCode: String, week: Int, courses: List<UestcCourse>) {
         ensureWeekCacheSemester(semesterCode)
         val map = loadWeekCourseMap().toMutableMap()
-        map[weekKey(week)] = courses.map { tagCourseForWeekIfNeeded(it, week) }
+        // 接口常带 1-16 等全学期周次，合并后按周过滤会致相邻周显示相同；按请求周强制打标
+        map[weekKey(week)] = courses.map { it.copy(weeks = week.toString()) }
         prefs.edit().putString(KEY_WEEK_COURSES, gson.toJson(map)).apply()
         markWeekTimetableSyncedToday(semesterCode, week)
         if (!isOfflineImported()) {
@@ -64,11 +65,6 @@ class AcademicCache(context: Context) {
 
     private fun rebuildMergedWeekCourses(): List<UestcCourse> =
         loadWeekCourseMap().values.flatten()
-
-    private fun tagCourseForWeekIfNeeded(course: UestcCourse, week: Int): UestcCourse {
-        if (course.weeks.isNotBlank()) return course
-        return course.copy(weeks = week.toString())
-    }
 
     /** 该教学周今天是否已同步过。 */
     fun wasWeekTimetableSyncedToday(semesterCode: String, week: Int): Boolean {

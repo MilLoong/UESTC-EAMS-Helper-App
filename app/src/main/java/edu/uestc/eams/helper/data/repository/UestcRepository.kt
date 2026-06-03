@@ -111,8 +111,9 @@ class UestcRepository(
                         weekOneMonday = weekOneMonday,
                     )
 
+                val fetchWeek = resolvedDisplay
                 if (!forceNetwork) {
-                    cache.loadWeekCourses(semester, displayWeek)?.let {
+                    cache.loadWeekCourses(semester, fetchWeek)?.let {
                         cache.saveTimetableMeta(meta)
                         return@withContext cache.loadTimetableCoursesForUi()
                     }
@@ -120,10 +121,10 @@ class UestcRepository(
 
                 val code = api.resolveStudentCode(ck)
                 val json =
-                    api.fetchWeekTimetableJson(ck, semester, code, displayWeek.toString())
+                    api.fetchWeekTimetableJson(ck, semester, code, fetchWeek.toString())
                         ?: throw IllegalStateException("课表接口无数据")
                 val courses = TimetableJsonParser.parse(json)
-                cache.saveWeekCourses(semester, displayWeek, courses)
+                cache.saveWeekCourses(semester, fetchWeek, courses)
                 cache.saveTimetableMeta(meta)
                 cache.setOfflineImported(false)
                 cache.loadTimetableCoursesForUi()
