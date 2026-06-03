@@ -44,6 +44,7 @@ internal object UserDataFetchErrors {
                     msg.contains("请重新登录") ||
                     msg.contains("未建立移动教务会话") ||
                     msg.contains("未登录") ||
+                    msg.contains("未授权") ||
                     msg.contains("unauthorized") ||
                     msg.contains("token") && msg.contains("失效")
             ) {

@@ -33,7 +33,9 @@ object BladeJson {
             val el = parseApiBody(bodyText) ?: return false
             if (!el.isJsonObject) return true
             val obj = el.asJsonObject
-            if (obj.has("success") && obj.get("success").asBoolean) return true
+            if (obj.has("success")) {
+                return obj.get("success").asBoolean
+            }
             val code = obj.get("code")?.asString ?: obj.get("code")?.toString()
             return code in listOf("200", "0", "0.0") || obj.get("code")?.asInt in listOf(200, 0)
         }
@@ -54,12 +56,16 @@ object BladeJson {
         val el = parseApiBody(bodyText) ?: return false
         if (!el.isJsonObject) return false
         val obj = el.asJsonObject
+        val msg = (obj.get("msg")?.asString ?: obj.get("message")?.asString ?: "").lowercase()
+        if (
+            listOf("登录", "token", "unauthorized", "未授权", "失效", "过期", "未登录")
+                .any { msg.contains(it) }
+        ) {
+            return true
+        }
         if (responseOk(response, bodyText)) return false
         val code = obj.get("code")?.asString ?: obj.get("code")?.toString()
-        if (code in listOf("401", "403", "10001")) return true
-        val msg = (obj.get("msg")?.asString ?: obj.get("message")?.asString ?: "").lowercase()
-        return listOf("登录", "token", "unauthorized", "未授权", "失效", "过期", "未登录")
-            .any { msg.contains(it) }
+        return code in listOf("401", "403", "10001")
     }
 
     fun firstSemesterCode(element: JsonElement?, depth: Int = 0): String? {

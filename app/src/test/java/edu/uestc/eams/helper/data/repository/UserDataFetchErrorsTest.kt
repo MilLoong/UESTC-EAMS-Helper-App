@@ -8,6 +8,18 @@ import org.junit.Test
 class UserDataFetchErrorsTest {
 
     @Test
+    fun unauthorized_api_msg_is_session_invalid() {
+        val mapped =
+            runBlocking {
+                UserDataFetchErrors.map(IllegalStateException("请求未授权"))
+            }
+        assertTrue(
+            mapped is EamsFetchException.SessionInvalid ||
+                mapped is EamsFetchException.OffCampus,
+        )
+    }
+
+    @Test
     fun auth_failure_message_is_classified() {
         val mapped =
             runBlocking {

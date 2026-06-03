@@ -75,9 +75,7 @@ class EamsAppApi(private val client: OkHttpClient) {
                 .addQueryParameter("code", studentCode)
                 .addQueryParameter("gradeType", "1")
                 .build()
-        val (_, body) = get(url.toString(), cookieHeader)
-        val root = BladeJson.parseApiBody(body) ?: return null
-        return BladeJson.unwrapRoot(root)
+        return fetchApiDataJson(url.toString(), cookieHeader, "成绩")
     }
 
     fun fetchExamQueryJson(cookieHeader: String, semester: String, examTypeId: String = "1"): JsonElement? {
@@ -87,9 +85,7 @@ class EamsAppApi(private val client: OkHttpClient) {
                 .addQueryParameter("semester", semester)
                 .addQueryParameter("examTypeId", examTypeId)
                 .build()
-        val (_, body) = get(url.toString(), cookieHeader)
-        val root = BladeJson.parseApiBody(body) ?: return null
-        return BladeJson.unwrapRoot(root)
+        return fetchApiDataJson(url.toString(), cookieHeader, "考试")
     }
 
     fun resolveStudentCode(cookieHeader: String): String {
