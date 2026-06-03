@@ -1,6 +1,7 @@
 package edu.uestc.eams.helper.notification
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -20,7 +21,8 @@ import edu.uestc.eams.helper.worker.CourseNotificationWorker
 
 object CourseNotificationHelper {
 
-    const val CHANNEL_ID = "class_reminder"
+    /** v2：提高重要性并默认震动，避免旧渠道在系统里被设为「仅静默通知」。 */
+    const val CHANNEL_ID = "class_reminder_v2"
     private const val NOTIFY_ID = 42001
     private const val DEBUG_NOTIFY_ID = 42002
 
@@ -42,8 +44,11 @@ object CourseNotificationHelper {
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         val lead = CourseReminderPreferences(context).leadMinutes
         val ch =
-            NotificationChannel(CHANNEL_ID, "上课提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            NotificationChannel(CHANNEL_ID, "上课提醒", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "开课前 ${CourseReminderPreferences.formatLeadLabel(lead)} 内提醒"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 280, 120, 280)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         nm.createNotificationChannel(ch)
     }
@@ -83,7 +88,10 @@ object CourseNotificationHelper {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setContentIntent(pi)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .build()
 
         NotificationManagerCompat.from(context).notify(
