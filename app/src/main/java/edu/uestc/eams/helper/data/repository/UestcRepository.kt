@@ -93,11 +93,22 @@ class UestcRepository(
                 cache.ensureWeekCacheSemester(semester)
                 val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
                 val displayWeek = week?.coerceAtLeast(1) ?: currentWeek
+                val prior = cache.loadTimetableMeta()
+                val bumpDisplay =
+                    week == null &&
+                        prior != null &&
+                        prior.semesterCode == semester &&
+                        prior.displayWeek == prior.currentWeek &&
+                        prior.currentWeek != currentWeek
+                val resolvedDisplay = if (bumpDisplay) currentWeek else displayWeek
+                val weekOneMonday =
+                    TeachingWeekEstimator.weekOneMondayForCurrentWeek(currentWeek).toString()
                 val meta =
                     TimetableMeta(
                         semesterCode = semester,
                         currentWeek = currentWeek,
-                        displayWeek = displayWeek,
+                        displayWeek = resolvedDisplay,
+                        weekOneMonday = weekOneMonday,
                     )
 
                 if (!forceNetwork) {
@@ -121,6 +132,46 @@ class UestcRepository(
 
     fun hasCachedTimetableWeek(semesterCode: String, week: Int): Boolean =
         cache.hasWeekCourses(semesterCode, week)
+
+    /**
+     * 轻量同步当前教学周（不拉课表）。用于回到前台或点 [本周] 时纠正周次与第 1 周周一锚点。
+     * @return 更新后的 meta；无法同步时 null
+     */
+    suspend fun syncCurrentTeachingWeek(): TimetableMeta? =
+        withContext(Dispatchers.IO) {
+            if (!hasLocalSession() || cache.isOfflineImported()) return@withContext null
+            runCatching {
+                val ck = ensureMobileCookieHeader()
+                val semester =
+                    api.fetchCurSemesterCode(ck)
+                        ?: cache.loadTimetableMeta()?.semesterCode
+                        ?: return@runCatching null
+                val currentWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching null
+                val prior = cache.loadTimetableMeta()
+                val bumpDisplay =
+                    prior != null &&
+                        prior.semesterCode == semester &&
+                        prior.displayWeek == prior.currentWeek &&
+                        prior.currentWeek != currentWeek
+                val displayWeek =
+                    if (bumpDisplay) {
+                        currentWeek
+                    } else {
+                        prior?.displayWeek ?: currentWeek
+                    }
+                val meta =
+                    TimetableMeta(
+                        semesterCode = semester,
+                        currentWeek = currentWeek,
+                        displayWeek = displayWeek,
+                        weekOneMonday =
+                            TeachingWeekEstimator.weekOneMondayForCurrentWeek(currentWeek)
+                                .toString(),
+                    )
+                cache.saveTimetableMeta(meta)
+                meta
+            }.getOrNull()
+        }
 
     /** 后台每日同步当前教学周课表：当日已同步且本地有缓存则不联网；无本地会话则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =

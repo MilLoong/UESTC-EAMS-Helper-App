@@ -307,9 +307,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun goCurrentTimetableWeek() {
-        val current = _ui.value.timetableMeta?.currentWeek ?: return
-        _ui.update { it.copy(timetablePagerScrollWeek = current) }
-        loadTimetableWeek(current)
+        viewModelScope.launch {
+            val synced = repo.syncCurrentTeachingWeek()
+            reloadFromCache()
+            val current = synced?.currentWeek ?: _ui.value.timetableMeta?.currentWeek ?: return@launch
+            _ui.update { it.copy(timetablePagerScrollWeek = current) }
+            loadTimetableWeek(current, forceNetwork = synced != null)
+        }
     }
 
     fun consumeTimetablePagerScroll() {
@@ -376,6 +380,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (hasSession && _ui.value.userProfile == null) {
                 repo.refreshUserProfile().getOrNull()?.let { p ->
                     _ui.update { it.copy(userProfile = p) }
+                }
+            }
+            if (hasSession && _ui.value.selectedTab == 0 && !repo.isOfflineImported()) {
+                val before = _ui.value.timetableMeta
+                val synced = repo.syncCurrentTeachingWeek()
+                if (synced != null) {
+                    reloadFromCache()
+                    if (
+                        synced.displayWeek != before?.displayWeek ||
+                        synced.currentWeek != before?.currentWeek
+                    ) {
+                        _ui.update { it.copy(timetablePagerScrollWeek = synced.displayWeek) }
+                    }
+                    if (synced.displayWeek != before?.displayWeek) {
+                        loadTimetableWeek(synced.displayWeek)
+                    }
                 }
             }
         }

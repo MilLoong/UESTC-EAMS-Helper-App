@@ -95,30 +95,40 @@ object BladeJson {
         }
     }
 
-    fun firstWeekInt(element: JsonElement?, lo: Int = 1, hi: Int = 40): Int? {
-        when {
-            element == null || element.isJsonNull -> return null
-            element.isJsonPrimitive -> {
-                val n = element.asString.trim().toIntOrNull() ?: element.asInt
-                return if (n in lo..hi) n else null
-            }
-            element.isJsonObject -> {
-                for (k in listOf("week", "curWeek", "currentWeek", "weekNum", "weekNo", "value", "data")) {
-                    element.asJsonObject.get(k)?.let { v ->
-                        firstWeekInt(v, lo, hi)?.let { return it }
-                    }
-                }
-                element.asJsonObject.entrySet().forEach { (_, v) ->
-                    firstWeekInt(v, lo, hi)?.let { return it }
+    /** 解析 getCurWeek 等接口的当前教学周；优先 curWeek，避免误读嵌套里的 week=1。 */
+    fun parseCurWeek(element: JsonElement?, lo: Int = 1, hi: Int = 40): Int? {
+        if (element == null || element.isJsonNull) return null
+        if (element.isJsonPrimitive) {
+            val n = element.asString.trim().toIntOrNull() ?: element.asInt
+            return if (n in lo..hi) n else null
+        }
+        if (element.isJsonObject) {
+            val o = element.asJsonObject
+            for (k in listOf("curWeek", "currentWeek", "cur_week", "weekNum", "weekNo", "week")) {
+                o.get(k)?.let { v ->
+                    weekIntFromPrimitive(v, lo, hi)?.let { return it }
+                    parseCurWeek(v, lo, hi)?.let { return it }
                 }
             }
-            element.isJsonArray -> {
-                element.asJsonArray.forEach { child ->
-                    firstWeekInt(child, lo, hi)?.let { return it }
-                }
+            o.entrySet().forEach { (_, v) ->
+                parseCurWeek(v, lo, hi)?.let { return it }
+            }
+        }
+        if (element.isJsonArray) {
+            element.asJsonArray.forEach { child ->
+                parseCurWeek(child, lo, hi)?.let { return it }
             }
         }
         return null
+    }
+
+    fun firstWeekInt(element: JsonElement?, lo: Int = 1, hi: Int = 40): Int? =
+        parseCurWeek(element, lo, hi)
+
+    private fun weekIntFromPrimitive(element: JsonElement?, lo: Int, hi: Int): Int? {
+        if (element == null || element.isJsonNull || !element.isJsonPrimitive) return null
+        val n = element.asString.trim().toIntOrNull() ?: element.asInt
+        return if (n in lo..hi) n else null
     }
 
     fun jwtClaims(jwt: String): JsonObject {
