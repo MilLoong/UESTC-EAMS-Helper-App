@@ -33,8 +33,8 @@ class CourseNotificationWorker(
         val minutes = ((upcoming.secondsUntilStart + 59) / 60).toInt().coerceAtLeast(1)
         CourseNotificationHelper.showClassReminder(
             context = applicationContext,
-            courseName = upcoming.course.courseName,
-            room = upcoming.course.room,
+            course = upcoming.course,
+            date = upcoming.date,
             minutesUntil = minutes,
             startTime = UestcPeriodTime.resolvedStartTime(upcoming.course),
             debug = false,
