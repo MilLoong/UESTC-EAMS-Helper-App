@@ -13,6 +13,12 @@ object TeachingWeekEstimator {
     fun weekOneMondayForCurrentWeek(currentWeek: Int, today: LocalDate = LocalDate.now()): LocalDate =
         teachingWeekMonday(today).minusWeeks((currentWeek - 1).coerceAtLeast(0).toLong())
 
+    fun teachingWeekForDate(
+        weekOneMonday: LocalDate,
+        date: LocalDate,
+        maxWeek: Int = 30,
+    ): Int = weekIndexFromMonday(weekOneMonday, date, maxWeek.coerceAtLeast(1))
+
     fun estimate(
         academicYear: Int?,
         maxWeek: Int,
