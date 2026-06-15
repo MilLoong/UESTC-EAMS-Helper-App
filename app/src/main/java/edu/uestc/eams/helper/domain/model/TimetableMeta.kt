@@ -13,3 +13,13 @@ data class TimetableMeta(
     fun weekOneMondayDate(): LocalDate? =
         weekOneMonday?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }
+
+/** 指定日期落在哪一教学周（优先用第 1 周周一锚点，与顶栏日期一致）。 */
+fun TimetableMeta.teachingWeekOn(date: LocalDate): Int {
+    weekOneMondayDate()?.let { anchor ->
+        val days = java.time.temporal.ChronoUnit.DAYS.between(anchor, date.with(java.time.DayOfWeek.MONDAY))
+        if (days < 0) return 1
+        return (days / 7 + 1).toInt().coerceAtLeast(1)
+    }
+    return currentWeek
+}

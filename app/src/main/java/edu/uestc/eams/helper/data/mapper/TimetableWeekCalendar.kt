@@ -25,6 +25,12 @@ object TimetableWeekCalendar {
     fun dateForWeekday(weekMonday: LocalDate, weekday: Int): LocalDate =
         weekMonday.plusDays((weekday - 1).coerceIn(0, 6).toLong())
 
+    /** 指定日期是否落在以 weekMonday 为起点的教学周内（周一至周日）。 */
+    fun containsDate(weekMonday: LocalDate, date: LocalDate): Boolean {
+        val sunday = weekMonday.plusDays(6)
+        return !date.isBefore(weekMonday) && !date.isAfter(sunday)
+    }
+
     fun formatHeaderDate(date: LocalDate): String = date.format(dateFmt)
 
     fun dayOfWeekLabel(dow: DayOfWeek): String =
