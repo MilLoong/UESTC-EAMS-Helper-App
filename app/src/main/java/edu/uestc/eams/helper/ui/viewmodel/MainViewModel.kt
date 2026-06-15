@@ -18,6 +18,7 @@ import edu.uestc.eams.helper.domain.grade.GradeStatsCalculator
 import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.TimetableMeta
+import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
 import edu.uestc.eams.helper.data.network.EamsFetchException
@@ -310,7 +311,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val synced = repo.syncCurrentTeachingWeek()
             reloadFromCache()
-            val current = synced?.currentWeek ?: _ui.value.timetableMeta?.currentWeek ?: return@launch
+            val meta = synced ?: _ui.value.timetableMeta ?: return@launch
+            val current = meta.teachingWeekOn(LocalDate.now())
             _ui.update { it.copy(timetablePagerScrollWeek = current) }
             loadTimetableWeek(current, forceNetwork = synced != null)
         }

@@ -147,8 +147,17 @@ class UestcRepository(
                     api.fetchCurSemesterCode(ck)
                         ?: cache.loadTimetableMeta()?.semesterCode
                         ?: return@runCatching null
-                val currentWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching null
+                val apiWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching null
                 val prior = cache.loadTimetableMeta()
+                val weekOneMonday =
+                    prior?.takeIf { it.semesterCode == semester }?.weekOneMonday
+                        ?: TeachingWeekEstimator.weekOneMondayForCurrentWeek(apiWeek)
+                            .toString()
+                val calendarWeek =
+                    prior?.weekOneMondayDate()?.let { anchor ->
+                        TeachingWeekEstimator.teachingWeekForDate(anchor, LocalDate.now())
+                    }
+                val currentWeek = maxOf(apiWeek, calendarWeek ?: apiWeek)
                 val bumpDisplay =
                     prior != null &&
                         prior.semesterCode == semester &&
@@ -165,9 +174,7 @@ class UestcRepository(
                         semesterCode = semester,
                         currentWeek = currentWeek,
                         displayWeek = displayWeek,
-                        weekOneMonday =
-                            TeachingWeekEstimator.weekOneMondayForCurrentWeek(currentWeek)
-                                .toString(),
+                        weekOneMonday = weekOneMonday,
                     )
                 cache.saveTimetableMeta(meta)
                 meta

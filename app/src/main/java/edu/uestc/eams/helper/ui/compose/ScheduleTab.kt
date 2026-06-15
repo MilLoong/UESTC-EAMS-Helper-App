@@ -55,6 +55,7 @@ import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
 import edu.uestc.eams.helper.domain.model.TimetableMeta
+import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
 
@@ -143,7 +144,7 @@ fun ScheduleTab(
         }
     }
     val weekMonday =
-        remember(headerWeek, currentWeek) {
+        remember(headerWeek, currentWeek, weekOneMonday) {
             TimetableWeekCalendar.mondayOfDisplayedWeek(
                 headerWeek,
                 currentWeek,
@@ -151,7 +152,10 @@ fun ScheduleTab(
                 weekOneMonday,
             )
         }
-    val isCurrentWeek = headerWeek == currentWeek
+    val isCurrentWeek =
+        remember(weekMonday, today) {
+            TimetableWeekCalendar.containsDate(weekMonday, today)
+        }
     val weekRangeSubtitle =
         TimetableWeekCalendar.formatHeaderDate(weekMonday) +
             " - " +
