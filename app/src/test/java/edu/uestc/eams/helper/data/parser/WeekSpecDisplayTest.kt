@@ -11,4 +11,11 @@ class WeekSpecDisplayTest {
         assertEquals("第3周", WeekSpecDisplay.formatForUi("3"))
         assertEquals("未标注周次", WeekSpecDisplay.formatForUi(""))
     }
+
+    @Test
+    fun format_compact() {
+        assertEquals("1-16周", WeekSpecDisplay.formatCompact("1-16"))
+        assertEquals("1-5,7-16周", WeekSpecDisplay.formatCompact("1-5,7-16"))
+        assertEquals("", WeekSpecDisplay.formatCompact(""))
+    }
 }

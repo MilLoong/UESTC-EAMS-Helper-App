@@ -54,8 +54,8 @@ class AcademicCache(context: Context) {
     fun saveWeekCourses(semesterCode: String, week: Int, courses: List<UestcCourse>) {
         ensureWeekCacheSemester(semesterCode)
         val map = loadWeekCourseMap().toMutableMap()
-        // 接口常带 1-16 等全学期周次，合并后按周过滤会致相邻周显示相同；按请求周强制打标
-        map[weekKey(week)] = courses.map { it.copy(weeks = week.toString()) }
+        // 保留接口原始周次（如 1-16），供卡片/详情展示起止周
+        map[weekKey(week)] = courses
         prefs.edit().putString(KEY_WEEK_COURSES, gson.toJson(map)).apply()
         markWeekTimetableSyncedToday(semesterCode, week)
         if (!isOfflineImported()) {
@@ -63,8 +63,50 @@ class AcademicCache(context: Context) {
         }
     }
 
-    private fun rebuildMergedWeekCourses(): List<UestcCourse> =
-        loadWeekCourseMap().values.flatten()
+    /**
+     * 合并各周缓存：同一课次只留一条，避免保留全学期周次后按周过滤时相邻周重复出块。
+     * 冲突时优先保留信息更完整的 weeks（含区间或更长）。
+     */
+    private fun rebuildMergedWeekCourses(): List<UestcCourse> {
+        val byKey = LinkedHashMap<String, UestcCourse>()
+        val weeks =
+            loadWeekCourseMap().entries.sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
+        for ((_, list) in weeks) {
+            for (course in list) {
+                val key = courseSlotKey(course)
+                val existing = byKey[key]
+                byKey[key] =
+                    if (existing == null) {
+                        course
+                    } else {
+                        preferRicherWeeks(existing, course)
+                    }
+            }
+        }
+        return byKey.values.toList()
+    }
+
+    private fun courseSlotKey(c: UestcCourse): String =
+        listOf(
+            c.weekday.toString(),
+            c.courseName.trim(),
+            c.period.toString(),
+            c.endPeriod.toString(),
+            c.room.trim(),
+            c.teacher.trim(),
+            c.lessonNo.trim().ifEmpty { c.courseId.trim() },
+        ).joinToString("|")
+
+    private fun preferRicherWeeks(a: UestcCourse, b: UestcCourse): UestcCourse =
+        if (weeksRichness(b.weeks) > weeksRichness(a.weeks)) b else a
+
+    private fun weeksRichness(spec: String): Int {
+        val s = spec.trim()
+        if (s.isEmpty()) return 0
+        var score = s.length
+        if (s.contains('-') || s.contains(',')) score += 100
+        return score
+    }
 
     /** 该教学周今天是否已同步过。 */
     fun wasWeekTimetableSyncedToday(semesterCode: String, week: Int): Boolean {
