@@ -13,6 +13,9 @@ object TeachingWeekEstimator {
     fun weekOneMondayForCurrentWeek(currentWeek: Int, today: LocalDate = LocalDate.now()): LocalDate =
         teachingWeekMonday(today).minusWeeks((currentWeek - 1).coerceAtLeast(0).toLong())
 
+    /** 将学期 startOn 对齐为第 1 教学周周一。 */
+    fun weekOneMondayFromStartOn(startOn: LocalDate): LocalDate = startOn.with(DayOfWeek.MONDAY)
+
     fun teachingWeekForDate(
         weekOneMonday: LocalDate,
         date: LocalDate,

@@ -54,8 +54,8 @@ import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
+import edu.uestc.eams.helper.data.parser.WeekSpecDisplay
 import edu.uestc.eams.helper.domain.model.TimetableMeta
-import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
 
@@ -541,6 +541,18 @@ private fun CourseCard(
             color = Color.White,
             lineHeight = 9.sp,
         )
+        val weeksLabel = WeekSpecDisplay.formatCompact(course.weeks)
+        if (weeksLabel.isNotEmpty()) {
+            Text(
+                weeksLabel,
+                fontSize = 7.sp,
+                lineHeight = 8.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                color = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.padding(top = 1.dp),
+            )
+        }
         if (startTime.isNotEmpty() || endTime.isNotEmpty()) {
             CourseTimeBlock(
                 startTime = startTime,
