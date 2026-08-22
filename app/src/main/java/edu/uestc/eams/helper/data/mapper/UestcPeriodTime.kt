@@ -18,14 +18,14 @@ object UestcPeriodTime {
             PeriodSlot(2, "09:20", "10:05"),
             PeriodSlot(3, "10:20", "11:05"),
             PeriodSlot(4, "11:10", "11:55"),
-            PeriodSlot(5, "14:00", "14:45"),
-            PeriodSlot(6, "14:50", "15:35"),
-            PeriodSlot(7, "16:00", "16:45"),
-            PeriodSlot(8, "16:50", "17:35"),
-            PeriodSlot(9, "19:00", "19:45"),
-            PeriodSlot(10, "19:50", "20:35"),
-            PeriodSlot(11, "20:40", "21:25"),
-            PeriodSlot(12, "21:30", "22:15"),
+            PeriodSlot(5, "14:30", "15:15"),
+            PeriodSlot(6, "15:20", "16:05"),
+            PeriodSlot(7, "16:10", "16:55"),
+            PeriodSlot(8, "17:00", "17:45"),
+            PeriodSlot(9, "19:30", "20:15"),
+            PeriodSlot(10, "20:20", "21:05"),
+            PeriodSlot(11, "21:10", "21:55"),
+            PeriodSlot(12, "22:00", "22:45"),
         )
 
     val maxPeriod: Int get() = slots.size
