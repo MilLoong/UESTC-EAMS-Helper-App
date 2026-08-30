@@ -209,7 +209,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 awaitingSms = false,
                 smsResendSecondsLeft = 0,
-                loginStatus = "正在提交验证码…",
+                loginStatus = "正在登录…",
                 contentLoading = true,
             )
         }
@@ -238,7 +238,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     contentLoading = true,
                     showLogin = true,
                     message = null,
-                    loginStatus = "正在连接统一身份认证…",
+                    loginStatus = "正在验证账号并获取验证码…",
                     awaitingSms = false,
                     smsResendSecondsLeft = 0,
                 )

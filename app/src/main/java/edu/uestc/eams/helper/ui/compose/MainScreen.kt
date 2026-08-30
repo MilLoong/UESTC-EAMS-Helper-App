@@ -363,15 +363,15 @@ private fun LoginDialog(
                     },
                     modifier = Modifier.fillMaxWidth().autofillPassword(),
                 )
-                OutlinedTextField(
-                    value = sms,
-                    onValueChange = { sms = it },
-                    label = { Text("短信验证码") },
-                    singleLine = true,
-                    enabled = !loading,
-                    modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
-                )
                 if (awaitingSms) {
+                    OutlinedTextField(
+                        value = sms,
+                        onValueChange = { sms = it },
+                        label = { Text("短信验证码") },
+                        singleLine = true,
+                        enabled = !loading,
+                        modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
+                    )
                     TextButton(
                         onClick = onResendSms,
                         enabled = !loading && smsResendSecondsLeft == 0,
@@ -393,12 +393,12 @@ private fun LoginDialog(
                 TextButton(
                     onClick = { onSubmitSms(sms) },
                     enabled = !loading && sms.isNotBlank(),
-                ) { Text("提交验证码") }
+                ) { Text(if (loading) "登录中…" else "登录") }
             } else {
                 TextButton(
                     onClick = { onLogin(user.trim(), pass) },
                     enabled = !loading && user.isNotBlank() && pass.isNotBlank(),
-                ) { Text(if (loading) "登录中…" else "登录") }
+                ) { Text(if (loading) "获取中…" else "获取验证码") }
             }
         },
         dismissButton = {
