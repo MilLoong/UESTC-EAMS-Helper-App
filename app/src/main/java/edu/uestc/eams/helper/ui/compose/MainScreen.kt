@@ -368,7 +368,7 @@ private fun LoginDialog(
                     onValueChange = { sms = it },
                     label = { Text("短信验证码") },
                     singleLine = true,
-                    enabled = !loading,
+                    enabled = !loading && awaitingSms,
                     modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
                 )
                 if (awaitingSms) {
