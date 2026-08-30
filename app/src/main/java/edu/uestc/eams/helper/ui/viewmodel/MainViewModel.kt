@@ -207,7 +207,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopSmsResendCooldown()
         _ui.update {
             it.copy(
-                awaitingSms = false,
+                // 提交期间保持短信阶段，避免主按钮切回「获取验证码」并误触再次 login()
+                awaitingSms = true,
                 smsResendSecondsLeft = 0,
                 loginStatus = "正在提交验证码…",
                 contentLoading = true,

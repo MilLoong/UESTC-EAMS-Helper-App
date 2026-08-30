@@ -389,16 +389,30 @@ private fun LoginDialog(
             }
         },
         confirmButton = {
-            if (awaitingSms) {
-                TextButton(
-                    onClick = { onSubmitSms(sms) },
-                    enabled = !loading && sms.isNotBlank(),
-                ) { Text(if (loading) "登录中…" else "登录") }
-            } else {
-                TextButton(
-                    onClick = { onLogin(user.trim(), pass) },
-                    enabled = !loading && user.isNotBlank() && pass.isNotBlank(),
-                ) { Text(if (loading) "获取中…" else "获取验证码") }
+            // 同一 TextButton，避免 awaitingSms 切换时替换按钮导致误触再次 login()
+            TextButton(
+                onClick = {
+                    if (awaitingSms) {
+                        onSubmitSms(sms)
+                    } else {
+                        onLogin(user.trim(), pass)
+                    }
+                },
+                enabled =
+                    if (awaitingSms) {
+                        !loading && sms.isNotBlank()
+                    } else {
+                        !loading && user.isNotBlank() && pass.isNotBlank()
+                    },
+            ) {
+                Text(
+                    when {
+                        loading && awaitingSms -> "登录中…"
+                        loading -> "获取中…"
+                        awaitingSms -> "登录"
+                        else -> "获取验证码"
+                    },
+                )
             }
         },
         dismissButton = {
