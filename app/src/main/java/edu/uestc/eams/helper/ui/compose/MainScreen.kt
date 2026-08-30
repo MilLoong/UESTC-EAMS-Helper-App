@@ -363,15 +363,16 @@ private fun LoginDialog(
                     },
                     modifier = Modifier.fillMaxWidth().autofillPassword(),
                 )
+                // 验证码框始终可看见；发码成功前不可编辑，避免误以为只需学号密码
+                OutlinedTextField(
+                    value = sms,
+                    onValueChange = { sms = it },
+                    label = { Text("短信验证码") },
+                    singleLine = true,
+                    enabled = !loading && awaitingSms,
+                    modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
+                )
                 if (awaitingSms) {
-                    OutlinedTextField(
-                        value = sms,
-                        onValueChange = { sms = it },
-                        label = { Text("短信验证码") },
-                        singleLine = true,
-                        enabled = !loading,
-                        modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
-                    )
                     TextButton(
                         onClick = onResendSms,
                         enabled = !loading && smsResendSecondsLeft == 0,
