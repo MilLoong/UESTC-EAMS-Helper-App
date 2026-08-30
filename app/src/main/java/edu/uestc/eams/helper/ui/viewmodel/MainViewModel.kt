@@ -203,16 +203,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _ui.update { it.copy(loginStatus = "请先填写短信验证码") }
             return
         }
-        smsContinuation.getAndSet(null)?.resume(trimmed)
+        val cont = smsContinuation.getAndSet(null)
+        if (cont == null) {
+            _ui.update {
+                it.copy(
+                    loginStatus = "验证码会话已失效，请重新点 [获取验证码]",
+                    awaitingSms = false,
+                    contentLoading = false,
+                )
+            }
+            return
+        }
+        // 提交期间保持 awaitingSms，避免界面退回「仅学号密码 / 获取验证码」
         stopSmsResendCooldown()
         _ui.update {
             it.copy(
-                awaitingSms = false,
+                awaitingSms = true,
                 smsResendSecondsLeft = 0,
                 loginStatus = "正在登录…",
                 contentLoading = true,
             )
         }
+        cont.resume(trimmed)
     }
 
     fun resendSmsCode() {
