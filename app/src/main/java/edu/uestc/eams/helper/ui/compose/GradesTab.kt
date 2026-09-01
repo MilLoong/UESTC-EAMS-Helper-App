@@ -54,17 +54,25 @@ fun GradesTab(
     onSelectAverageScope: (Collection<String>, Boolean) -> Unit,
     onSelectGpaScope: (Collection<String>, Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    currentSemesterCode: String? = null,
 ) {
     if (grades.isEmpty()) {
         EmptyHint("暂无成绩数据\n请到课表页点刷新获取", modifier)
         return
     }
     var detailGrade by remember { mutableStateOf<GradeItem?>(null) }
-    var scopeSemester by remember { mutableStateOf<String?>(null) }
+    var semesterScope by remember { mutableStateOf<SemesterBarSelection>(SemesterBarSelection.All) }
     val semesterOptions = remember(grades) { semesterOptionsOf(grades) }
     val scopedGrades =
-        remember(grades, scopeSemester) {
-            if (scopeSemester == null) grades else grades.filter { it.semester == scopeSemester }
+        remember(grades, semesterScope, currentSemesterCode) {
+            when (val scope = semesterScope) {
+                SemesterBarSelection.All -> grades
+                SemesterBarSelection.Current -> {
+                    val current = currentSemesterCode?.takeIf { it.isNotBlank() }
+                    if (current == null) grades else grades.filter { it.semester == current }
+                }
+                is SemesterBarSelection.Code -> grades.filter { it.semester == scope.value }
+            }
         }
     val scopedKeys = remember(scopedGrades) { scopedGrades.map { GradeStatsCalculator.stableKey(it) } }
     val avgStat =
@@ -77,7 +85,20 @@ fun GradesTab(
         }
     val allAvgSelected = scopedKeys.isNotEmpty() && scopedKeys.all { it in averageKeys }
     val allGpaSelected = scopedKeys.isNotEmpty() && scopedKeys.all { it in gpaKeys }
-    val scopeLabel = scopeSemester?.let { semesterLabel(it) }
+    val scopeLabel =
+        when (val scope = semesterScope) {
+            SemesterBarSelection.All -> null
+            SemesterBarSelection.Current ->
+                currentSemesterCode?.takeIf { it.isNotBlank() }?.let { semesterLabel(it) }
+                    ?: "当前学期"
+            is SemesterBarSelection.Code -> semesterLabel(scope.value)
+        }
+    val listTitle =
+        when (semesterScope) {
+            SemesterBarSelection.All -> "全部课程"
+            SemesterBarSelection.Current -> "当前学期"
+            is SemesterBarSelection.Code -> scopeLabel ?: "课程"
+        }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -87,8 +108,11 @@ fun GradesTab(
         item {
             SemesterSelectBar(
                 semesterOptions = semesterOptions,
-                selectedSemester = scopeSemester,
-                onSelect = { scopeSemester = it },
+                selection = semesterScope,
+                onSelect = { semesterScope = it },
+                showAllOption = true,
+                currentSemesterCode = currentSemesterCode,
+                showCurrentOption = !currentSemesterCode.isNullOrBlank(),
             )
         }
         item {
@@ -116,7 +140,7 @@ fun GradesTab(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    scopeLabel ?: "全部课程",
+                    listTitle,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )

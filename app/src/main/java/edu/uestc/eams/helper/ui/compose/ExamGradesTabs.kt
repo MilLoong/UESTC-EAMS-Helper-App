@@ -62,8 +62,22 @@ fun ExamTab(
             item {
                 SemesterSelectBar(
                     semesterOptions = semesterOptions,
-                    selectedSemester = activeSemesterCode,
-                    onSelect = onSemesterSelect,
+                    selection =
+                        if (activeSemesterCode.isNullOrBlank()) {
+                            SemesterBarSelection.Current
+                        } else {
+                            SemesterBarSelection.Code(activeSemesterCode)
+                        },
+                    onSelect = { sel ->
+                        onSemesterSelect(
+                            when (sel) {
+                                is SemesterBarSelection.Code -> sel.value
+                                SemesterBarSelection.Current,
+                                SemesterBarSelection.All,
+                                -> null
+                            },
+                        )
+                    },
                     showAllOption = false,
                     currentSemesterCode = currentSemesterCode,
                     showCurrentOption = true,

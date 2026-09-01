@@ -42,12 +42,19 @@ internal fun semesterLabel(code: String): String {
     return t
 }
 
-/** 学期选择栏；[selectedSemester] 为 null 且 [showAllOption] 为 true 时表示「全部」。 */
+/** 学期选择栏选中态：全部 / 当前学期 / 指定学期编码。 */
+internal sealed interface SemesterBarSelection {
+    data object All : SemesterBarSelection
+    data object Current : SemesterBarSelection
+    data class Code(val value: String) : SemesterBarSelection
+}
+
+/** 学期选择栏。 */
 @Composable
 internal fun SemesterSelectBar(
     semesterOptions: List<String>,
-    selectedSemester: String?,
-    onSelect: (String?) -> Unit,
+    selection: SemesterBarSelection,
+    onSelect: (SemesterBarSelection) -> Unit,
     modifier: Modifier = Modifier,
     showAllOption: Boolean = true,
     currentSemesterCode: String? = null,
@@ -68,26 +75,24 @@ internal fun SemesterSelectBar(
     ) {
         if (showAllOption) {
             FilterChip(
-                selected = selectedSemester == null,
-                onClick = { onSelect(null) },
+                selected = selection is SemesterBarSelection.All,
+                onClick = { onSelect(SemesterBarSelection.All) },
                 shape = MaterialTheme.shapes.small,
                 label = { Text("全部", style = MaterialTheme.typography.labelMedium) },
             )
         }
         if (showCurrentOption) {
             FilterChip(
-                selected =
-                    selectedSemester == null ||
-                        (!currentSemesterCode.isNullOrBlank() && selectedSemester == currentSemesterCode),
-                onClick = { onSelect(null) },
+                selected = selection is SemesterBarSelection.Current,
+                onClick = { onSelect(SemesterBarSelection.Current) },
                 shape = MaterialTheme.shapes.small,
                 label = { Text("当前学期", style = MaterialTheme.typography.labelMedium) },
             )
         }
         chips.forEach { code ->
             FilterChip(
-                selected = selectedSemester == code,
-                onClick = { onSelect(code) },
+                selected = selection is SemesterBarSelection.Code && selection.value == code,
+                onClick = { onSelect(SemesterBarSelection.Code(code)) },
                 shape = MaterialTheme.shapes.small,
                 label = { Text(semesterLabel(code), style = MaterialTheme.typography.labelMedium) },
             )

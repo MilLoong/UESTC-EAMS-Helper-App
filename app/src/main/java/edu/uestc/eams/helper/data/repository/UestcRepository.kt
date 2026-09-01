@@ -315,6 +315,8 @@ class UestcRepository(
     fun cachedCourses(semesterCode: String): List<UestcCourse> =
         if (semesterCode.isBlank()) emptyList() else cache.loadTimetableCoursesForUi(semesterCode)
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
+    fun cachedExamSemesters(): List<String> = cache.examSemesters()
+    fun cachedTimetableSemesters(): List<String> = cache.timetableSemesters()
     fun isOfflineImported(): Boolean = cache.isOfflineImported()
 
     /** 从 WakeUp 导出的 HTML 导入课表并覆盖本地缓存；[weekOneMonday] 为第 1 教学周周一。 */
