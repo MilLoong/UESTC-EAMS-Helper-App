@@ -119,6 +119,62 @@ private const val TIMETABLE_PAGE_COUNT = 30
 
 private fun scaledSp(base: Float, fontScale: Float) = (base * fontScale).sp
 
+/** 网纹背景：按节次行高/列宽叠加淡灰色横竖线，不改变配色。 */
+@Composable
+private fun Modifier.timetableGridMesh(
+    show: Boolean,
+    rowHeight: Dp,
+    columnWidth: Dp,
+): Modifier {
+    if (!show) return this
+    val lineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+    return drawBehind {
+        val rowPx = rowHeight.toPx()
+        val colPx = columnWidth.toPx()
+        var y = rowPx
+        while (y < size.height) {
+            drawLine(lineColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            y += rowPx
+        }
+        var x = colPx
+        while (x < size.width) {
+            drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+            x += colPx
+        }
+    }
+}
+
+@Composable
+private fun Modifier.timetableNoonDivider(show: Boolean, rowHeight: Dp): Modifier {
+    if (!show) return this
+    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+    return drawBehind {
+        val y = rowHeight.toPx() * UestcPeriodTime.NOON_DIVIDER_AFTER_PERIOD
+        drawLine(
+            color = dividerColor,
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = 2.dp.toPx(),
+        )
+    }
+}
+
+/** 中午分隔条：绘制在课程块之上，且上下各留一段背景色空隙，避免被卡片盖住而看不清。 */
+@Composable
+private fun Modifier.timetableNoonSeparator(show: Boolean, rowHeight: Dp): Modifier {
+    if (!show) return this
+    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.85f)
+    val bandColor = MaterialTheme.colorScheme.background
+    return drawWithContent {
+        drawContent()
+        val y = rowHeight.toPx() * UestcPeriodTime.NOON_DIVIDER_AFTER_PERIOD
+        val band = 4.dp.toPx()
+        val line = 2.dp.toPx()
+        drawRect(bandColor, topLeft = Offset(0f, y - band / 2f), size = Size(size.width, band))
+        drawLine(dividerColor, Offset(0f, y), Offset(size.width, y), strokeWidth = line)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleTab(
