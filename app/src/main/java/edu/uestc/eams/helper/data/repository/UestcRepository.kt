@@ -178,17 +178,12 @@ class UestcRepository(
                         apiWeek = apiWeek,
                         maxWeek = maxWeek,
                     )
-                val bumpDisplay =
-                    prior != null &&
-                        prior.semesterCode == semester &&
-                        prior.displayWeek == prior.currentWeek &&
-                        prior.currentWeek != currentWeek
                 val displayWeek =
-                    if (bumpDisplay) {
-                        currentWeek
-                    } else {
-                        prior?.displayWeek ?: currentWeek
-                    }
+                    resolveDisplayWeekAfterSync(
+                        prior = prior,
+                        semester = semester,
+                        currentWeek = currentWeek,
+                    )
                 val meta =
                     TimetableMeta(
                         semesterCode = semester,
@@ -200,6 +195,18 @@ class UestcRepository(
                 meta
             }.getOrNull()
         }
+
+    /**
+     * 冷启动时把显示周对齐到「今天」所在教学周，避免仍停在上次退出时浏览的周次。
+     */
+    fun alignTimetableDisplayToToday(): TimetableMeta? {
+        val meta = cache.loadTimetableMeta() ?: return null
+        val todayWeek = meta.teachingWeekOn(LocalDate.now()).coerceAtLeast(1)
+        if (meta.displayWeek == todayWeek && meta.currentWeek == todayWeek) return meta
+        val updated = meta.copy(currentWeek = todayWeek, displayWeek = todayWeek)
+        cache.saveTimetableMeta(updated)
+        return updated
+    }
 
     /** 后台每日同步当前教学周课表：当日已同步且本地有缓存则不联网；无本地会话则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =
@@ -394,6 +401,20 @@ class UestcRepository(
             today.isBefore(weekOneMonday) -> 1
             else -> maxOf(fromApi, calendarWeek)
         }
+    }
+
+    /**
+     * 同步后显示哪一周：换学期或上次就在看「本周」时跟到 currentWeek；
+     * 同学期内若上次特意翻到其它周，则保留（会话内浏览）。
+     */
+    private fun resolveDisplayWeekAfterSync(
+        prior: TimetableMeta?,
+        semester: String,
+        currentWeek: Int,
+    ): Int {
+        if (prior == null || prior.semesterCode != semester) return currentWeek
+        if (prior.displayWeek == prior.currentWeek) return currentWeek
+        return prior.displayWeek.coerceAtLeast(1)
     }
 
     private suspend fun <T> runUserDataFetch(block: suspend () -> T): Result<T> =
