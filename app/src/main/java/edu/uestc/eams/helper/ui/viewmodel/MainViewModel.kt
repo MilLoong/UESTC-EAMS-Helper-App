@@ -71,6 +71,8 @@ data class MainUiState(
     val wakeUpImportPrompt: WakeUpImportPrompt? = null,
     val timetableLayout: TimetableLayoutSettings = TimetableLayoutSettings(),
     val themeName: String = ThemePreferences.DEFAULT_THEME,
+    /** 非 null 时课表 HorizontalPager 动画滚到该周，消费后清空。 */
+    val timetablePagerScrollWeek: Int? = null,
 )
 
 /** 树维 HTML 已解析，待用户确认第 1 教学周起始日。 */
@@ -117,6 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         reloadFromCache()
         repo.alignTimetableDisplayToToday()?.let { aligned ->
             reloadFromCache()
+            _ui.update { it.copy(timetablePagerScrollWeek = aligned.displayWeek) }
             if (repo.hasLocalSession() && !repo.isOfflineImported()) {
                 loadTimetableWeek(aligned.displayWeek)
             }
@@ -342,6 +345,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun shiftTimetableWeek(delta: Int) {
         val base = _ui.value.timetableMeta?.displayWeek ?: 1
         val target = (base + delta).coerceAtLeast(1)
+        _ui.update { it.copy(timetablePagerScrollWeek = target) }
         selectTimetableWeek(target)
     }
 
@@ -369,7 +373,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             reloadFromCache()
             val meta = synced ?: _ui.value.timetableMeta ?: return@launch
             val current = meta.teachingWeekOn(LocalDate.now())
+            _ui.update { it.copy(timetablePagerScrollWeek = current) }
             loadTimetableWeek(current, forceNetwork = synced != null)
+        }
+    }
+
+    fun consumeTimetablePagerScroll() {
+        if (_ui.value.timetablePagerScrollWeek != null) {
+            _ui.update { it.copy(timetablePagerScrollWeek = null) }
         }
     }
 
@@ -580,6 +591,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val synced = repo.syncCurrentTeachingWeek()
                 if (synced != null) {
                     reloadFromCache()
+                    if (synced.displayWeek != before?.displayWeek ||
+                        synced.currentWeek != before?.currentWeek
+                    ) {
+                        _ui.update { it.copy(timetablePagerScrollWeek = synced.displayWeek) }
+                    }
                     if (synced.displayWeek != before?.displayWeek) {
                         loadTimetableWeek(synced.displayWeek)
                     }

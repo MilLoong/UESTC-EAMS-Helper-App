@@ -116,11 +116,13 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                             state.scheduleSemester == null ||
                                 state.scheduleSemester == state.currentSemesterCode,
                         onSemesterSelect = { viewModel.selectScheduleSemester(it) },
+                        pagerScrollWeek = state.timetablePagerScrollWeek,
                         modifier = Modifier.fillMaxSize(),
                         onPrevWeek = { viewModel.shiftTimetableWeek(-1) },
                         onNextWeek = { viewModel.shiftTimetableWeek(1) },
                         onGoCurrentWeek = { viewModel.goCurrentTimetableWeek() },
                         onSelectWeek = { viewModel.selectTimetableWeek(it) },
+                        onPagerScrollConsumed = { viewModel.consumeTimetablePagerScroll() },
                         onRefresh = { viewModel.refreshAll() },
                         onLayoutChange = { viewModel.setTimetableLayout(it) },
                     )
