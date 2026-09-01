@@ -26,7 +26,8 @@ enum class TimetableCourseNameMode {
 data class TimetableLayoutSettings(
     val fontScale: Float = 1f,
     val rowHeightDp: Float = 50f,
-    val dayColumnWidthDp: Float = 52f,
+    /** 默认取下限：实际列宽用 max(设置值, 可视宽度/7)，保证默认铺满周一到周日。 */
+    val dayColumnWidthDp: Float = MIN_DAY_COLUMN_WIDTH_DP,
     val timeColumnWidthDp: Float = 38f,
     val showNoonDivider: Boolean = true,
     val courseNameMode: TimetableCourseNameMode = TimetableCourseNameMode.FULL,
@@ -89,11 +90,18 @@ class TimetableDisplayPreferences(context: Context) {
     private val prefs =
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
-    fun load(): TimetableLayoutSettings =
-        TimetableLayoutSettings(
+    fun load(): TimetableLayoutSettings {
+        val storedDayWidth = prefs.getFloat(KEY_DAY_COLUMN_WIDTH_DP, TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP)
+        val dayColumnWidthDp =
+            if (storedDayWidth == LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP) {
+                TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP
+            } else {
+                storedDayWidth
+            }
+        return TimetableLayoutSettings(
             fontScale = prefs.getFloat(KEY_FONT_SCALE, 1f),
             rowHeightDp = prefs.getFloat(KEY_ROW_HEIGHT_DP, 50f),
-            dayColumnWidthDp = prefs.getFloat(KEY_DAY_COLUMN_WIDTH_DP, 52f),
+            dayColumnWidthDp = dayColumnWidthDp,
             timeColumnWidthDp = prefs.getFloat(KEY_TIME_COLUMN_WIDTH_DP, 38f),
             showNoonDivider = prefs.getBoolean(KEY_SHOW_NOON_DIVIDER, true),
             courseNameMode =
@@ -103,6 +111,7 @@ class TimetableDisplayPreferences(context: Context) {
             gridMesh = prefs.getBoolean(KEY_GRID_MESH, false),
             courseCardBorder = prefs.getBoolean(KEY_COURSE_CARD_BORDER, true),
         ).coerce()
+    }
 
     fun save(settings: TimetableLayoutSettings) {
         val s = settings.coerce()
@@ -128,5 +137,6 @@ class TimetableDisplayPreferences(context: Context) {
         private const val KEY_COURSE_NAME_MODE = "course_name_mode"
         private const val KEY_GRID_MESH = "grid_mesh"
         private const val KEY_COURSE_CARD_BORDER = "course_card_border"
+        private const val LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP = 52f
     }
 }

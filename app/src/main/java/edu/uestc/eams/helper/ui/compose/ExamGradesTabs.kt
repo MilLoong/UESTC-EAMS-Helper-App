@@ -40,12 +40,19 @@ fun ExamTab(
     modifier: Modifier = Modifier,
     semesterOptions: List<String> = emptyList(),
     activeSemesterCode: String? = null,
+    currentSemesterCode: String? = null,
     onSemesterSelect: (String?) -> Unit = {},
 ) {
     if (exams.isEmpty() && semesterOptions.isEmpty()) {
         EmptyHint("暂无考试安排\n请到课表页点刷新获取", modifier)
         return
     }
+    val headerSemesterLabel =
+        when {
+            !activeSemesterCode.isNullOrBlank() -> semesterLabel(activeSemesterCode)
+            !currentSemesterCode.isNullOrBlank() -> "当前学期"
+            else -> null
+        }
     LazyColumn(
         modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
@@ -58,6 +65,8 @@ fun ExamTab(
                     selectedSemester = activeSemesterCode,
                     onSelect = onSemesterSelect,
                     showAllOption = false,
+                    currentSemesterCode = currentSemesterCode,
+                    showCurrentOption = true,
                 )
             }
         }
@@ -72,9 +81,9 @@ fun ExamTab(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.weight(1f))
-                activeSemesterCode?.takeIf { it.isNotBlank() }?.let {
+                headerSemesterLabel?.let {
                     Text(
-                        semesterLabel(it),
+                        it,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

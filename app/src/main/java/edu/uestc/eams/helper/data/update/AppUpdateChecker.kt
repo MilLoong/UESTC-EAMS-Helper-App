@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -24,13 +25,14 @@ class AppUpdateChecker(
     suspend fun fetchLatestIfNewer(localVersionName: String): UpdateInfo? =
         withContext(Dispatchers.IO) {
             runCatching {
-                val release = fetchLatestReleaseJson() ?: return@runCatching null
+                val release = fetchNewestReleaseJson() ?: return@runCatching null
                 val tag = release.optString("tag_name").trim()
                 if (tag.isEmpty()) return@runCatching null
                 val versionName = AppVersion.normalizeTag(tag)
                 if (!AppVersion.isRemoteNewer(versionName, localVersionName)) return@runCatching null
 
-                val pageUrl = release.optString("html_url").ifBlank { AppLinks.GITHUB_REPO_APP }
+                val pageUrl =
+                    release.optString("html_url").ifBlank { AppLinks.GITHUB_RELEASES_LATEST }
                 val downloadUrl = pickApkDownloadUrl(release) ?: pageUrl
                 val notes = release.optString("body").trim().take(MAX_NOTES_LEN)
 
@@ -44,7 +46,53 @@ class AppUpdateChecker(
             }.getOrNull()
         }
 
-    private fun fetchLatestReleaseJson(): JSONObject? {
+    /**
+     * 不直接信任 `/releases/latest`：多次改 tag / 重建 Release 后，
+     * GitHub 的「Latest」标记可能仍停在旧版（例如 v1.3.0）。
+     * 改为拉列表，按语义化版本取最高的正式版。
+     */
+    private fun fetchNewestReleaseJson(): JSONObject? {
+        val releases = fetchReleaseList()
+        if (!releases.isNullOrEmpty()) {
+            return releases.maxWithOrNull { a, b ->
+                val va = AppVersion.normalizeTag(a.optString("tag_name"))
+                val vb = AppVersion.normalizeTag(b.optString("tag_name"))
+                when {
+                    AppVersion.isRemoteNewer(va, vb) -> 1
+                    AppVersion.isRemoteNewer(vb, va) -> -1
+                    else -> 0
+                }
+            }
+        }
+        return fetchLatestEndpointRelease()
+    }
+
+    private fun fetchReleaseList(): List<JSONObject>? {
+        val request =
+            Request.Builder()
+                .url(AppLinks.GITHUB_RELEASES_API)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .get()
+                .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body?.string().orEmpty()
+            if (body.isBlank()) return null
+            val array = JSONArray(body)
+            val out = mutableListOf<JSONObject>()
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                if (item.optBoolean("draft", false)) continue
+                if (item.optBoolean("prerelease", false)) continue
+                if (item.optString("tag_name").isBlank()) continue
+                out += item
+            }
+            return out
+        }
+    }
+
+    private fun fetchLatestEndpointRelease(): JSONObject? {
         val request =
             Request.Builder()
                 .url(AppLinks.GITHUB_RELEASES_LATEST_API)

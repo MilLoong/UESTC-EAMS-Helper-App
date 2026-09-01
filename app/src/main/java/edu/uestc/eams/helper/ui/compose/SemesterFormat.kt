@@ -50,7 +50,15 @@ internal fun SemesterSelectBar(
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
     showAllOption: Boolean = true,
+    currentSemesterCode: String? = null,
+    showCurrentOption: Boolean = false,
 ) {
+    val chips =
+        if (showCurrentOption && !currentSemesterCode.isNullOrBlank()) {
+            semesterOptions.filter { it != currentSemesterCode }
+        } else {
+            semesterOptions
+        }
     Row(
         modifier
             .fillMaxWidth()
@@ -66,7 +74,17 @@ internal fun SemesterSelectBar(
                 label = { Text("全部", style = MaterialTheme.typography.labelMedium) },
             )
         }
-        semesterOptions.forEach { code ->
+        if (showCurrentOption) {
+            FilterChip(
+                selected =
+                    selectedSemester == null ||
+                        (!currentSemesterCode.isNullOrBlank() && selectedSemester == currentSemesterCode),
+                onClick = { onSelect(null) },
+                shape = MaterialTheme.shapes.small,
+                label = { Text("当前学期", style = MaterialTheme.typography.labelMedium) },
+            )
+        }
+        chips.forEach { code ->
             FilterChip(
                 selected = selectedSemester == code,
                 onClick = { onSelect(code) },

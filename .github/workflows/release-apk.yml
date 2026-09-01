@@ -162,4 +162,5 @@ jobs:
           body_path: release-notes.md
           draft: false
           prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true

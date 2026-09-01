@@ -132,6 +132,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         modifier = Modifier.fillMaxSize(),
                         semesterOptions = state.semesterOptions,
                         activeSemesterCode = state.examSemester,
+                        currentSemesterCode = state.currentSemesterCode,
                         onSemesterSelect = { viewModel.selectExamSemester(it) },
                     )
                 2 ->
