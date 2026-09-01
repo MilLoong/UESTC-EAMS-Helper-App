@@ -143,6 +143,17 @@ class AcademicCache(context: Context) {
 
     fun examSemesters(): List<String> = examsBySemester().keys.sortedDescending()
 
+    /** 本地已缓存过周课表的学期编码（历史学期可切换查看）。 */
+    fun timetableSemesters(): List<String> =
+        loadWeekCourseMap()
+            .keys
+            .mapNotNull { key ->
+                val sep = key.indexOf('|')
+                if (sep <= 0) null else key.substring(0, sep).takeIf { it.isNotBlank() }
+            }
+            .distinct()
+            .sortedDescending()
+
     private fun examsBySemester(): Map<String, List<ExamItem>> =
         prefs.getString(KEY_EXAMS_BY_SEMESTER, null)?.let {
             gson.fromJson(it, object : TypeToken<Map<String, List<ExamItem>>>() {}.type)

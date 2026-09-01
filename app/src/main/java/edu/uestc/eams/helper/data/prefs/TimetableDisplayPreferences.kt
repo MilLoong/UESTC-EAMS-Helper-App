@@ -24,9 +24,9 @@ enum class TimetableCourseNameMode {
 }
 
 data class TimetableLayoutSettings(
-    val fontScale: Float = 1f,
-    val rowHeightDp: Float = 50f,
-    /** 默认取下限：实际列宽用 max(设置值, 可视宽度/7)，保证默认铺满周一到周日。 */
+    /** 默认取各维度下限；实际格宽/行高再用 max(设置值, 可视区域铺满)，保证默认即最小缩放。 */
+    val fontScale: Float = MIN_FONT_SCALE,
+    val rowHeightDp: Float = MIN_ROW_HEIGHT_DP,
     val dayColumnWidthDp: Float = MIN_DAY_COLUMN_WIDTH_DP,
     val timeColumnWidthDp: Float = 38f,
     val showNoonDivider: Boolean = true,
@@ -91,26 +91,46 @@ class TimetableDisplayPreferences(context: Context) {
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     fun load(): TimetableLayoutSettings {
-        val storedDayWidth = prefs.getFloat(KEY_DAY_COLUMN_WIDTH_DP, TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP)
-        val dayColumnWidthDp =
-            if (storedDayWidth == LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP) {
-                TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP
+        val storedFont = prefs.getFloat(KEY_FONT_SCALE, TimetableLayoutSettings.MIN_FONT_SCALE)
+        val storedRow = prefs.getFloat(KEY_ROW_HEIGHT_DP, TimetableLayoutSettings.MIN_ROW_HEIGHT_DP)
+        val storedDayWidth =
+            prefs.getFloat(KEY_DAY_COLUMN_WIDTH_DP, TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP)
+        // 旧版出厂默认（字号 1.0 + 行高 50 + 列宽 40/52）整组迁到最小缩放，并写回避免反复覆盖用户之后的手动设置。
+        val legacyDefaultCombo =
+            storedFont == LEGACY_DEFAULT_FONT_SCALE &&
+                storedRow == LEGACY_DEFAULT_ROW_HEIGHT_DP &&
+                (storedDayWidth == LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP ||
+                    storedDayWidth == TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP)
+        val settings =
+            if (legacyDefaultCombo) {
+                TimetableLayoutSettings()
             } else {
-                storedDayWidth
-            }
-        return TimetableLayoutSettings(
-            fontScale = prefs.getFloat(KEY_FONT_SCALE, 1f),
-            rowHeightDp = prefs.getFloat(KEY_ROW_HEIGHT_DP, 50f),
-            dayColumnWidthDp = dayColumnWidthDp,
-            timeColumnWidthDp = prefs.getFloat(KEY_TIME_COLUMN_WIDTH_DP, 38f),
-            showNoonDivider = prefs.getBoolean(KEY_SHOW_NOON_DIVIDER, true),
-            courseNameMode =
-                TimetableCourseNameMode.fromStored(
-                    prefs.getString(KEY_COURSE_NAME_MODE, TimetableCourseNameMode.FULL.name),
-                ),
-            gridMesh = prefs.getBoolean(KEY_GRID_MESH, false),
-            courseCardBorder = prefs.getBoolean(KEY_COURSE_CARD_BORDER, true),
-        ).coerce()
+                TimetableLayoutSettings(
+                    fontScale = storedFont,
+                    rowHeightDp = storedRow,
+                    dayColumnWidthDp =
+                        if (storedDayWidth == LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP) {
+                            TimetableLayoutSettings.MIN_DAY_COLUMN_WIDTH_DP
+                        } else {
+                            storedDayWidth
+                        },
+                    timeColumnWidthDp = prefs.getFloat(KEY_TIME_COLUMN_WIDTH_DP, 38f),
+                    showNoonDivider = prefs.getBoolean(KEY_SHOW_NOON_DIVIDER, true),
+                    courseNameMode =
+                        TimetableCourseNameMode.fromStored(
+                            prefs.getString(KEY_COURSE_NAME_MODE, TimetableCourseNameMode.FULL.name),
+                        ),
+                    gridMesh = prefs.getBoolean(KEY_GRID_MESH, false),
+                    courseCardBorder = prefs.getBoolean(KEY_COURSE_CARD_BORDER, true),
+                )
+            }.coerce()
+        if (
+            legacyDefaultCombo ||
+                storedDayWidth == LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP
+        ) {
+            save(settings)
+        }
+        return settings
     }
 
     fun save(settings: TimetableLayoutSettings) {
@@ -137,6 +157,9 @@ class TimetableDisplayPreferences(context: Context) {
         private const val KEY_COURSE_NAME_MODE = "course_name_mode"
         private const val KEY_GRID_MESH = "grid_mesh"
         private const val KEY_COURSE_CARD_BORDER = "course_card_border"
+        /** 1.3.4 及更早的出厂默认，升级后视为未自定义并迁到最小缩放。 */
+        private const val LEGACY_DEFAULT_FONT_SCALE = 1f
+        private const val LEGACY_DEFAULT_ROW_HEIGHT_DP = 50f
         private const val LEGACY_DEFAULT_DAY_COLUMN_WIDTH_DP = 52f
     }
 }

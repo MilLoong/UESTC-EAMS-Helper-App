@@ -142,21 +142,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        viewModelScope.launch {
-            val cur = repo.fetchCurrentSemesterCode()
-            val priorMetaSemester = repo.cachedTimetableMeta()?.semesterCode
-            _ui.update { it.copy(currentSemesterCode = cur) }
-            val semesterChanged =
-                cur != null &&
-                    cur != priorMetaSemester &&
-                    !repo.isOfflineImported()
-            if (semesterChanged && _ui.value.scheduleSemester.isNullOrBlank()) {
-                refreshCurrentSemesterData()
-            } else {
-                reloadFromCache()
-            }
-        }
+        viewModelScope.launch { syncCurrentSemesterIfNeeded() }
         viewModelScope.launch { checkAppUpdate(force = false) }
+    }
+
+    /**
+     * 从教务拉取当前学期编码；若学期已切换，把「当前学期」指向新学期，
+     * 旧学期数据仍按学期码留在本地，可从历史学期入口查看。
+     * @return 是否发生了学期切换并已触发刷新
+     */
+    private suspend fun syncCurrentSemesterIfNeeded(): Boolean {
+        if (!repo.hasLocalSession() || repo.isOfflineImported()) {
+            reloadFromCache()
+            return false
+        }
+        val previousUiCurrent = _ui.value.currentSemesterCode
+        val priorMetaSemester = repo.cachedTimetableMeta()?.semesterCode
+        val cur = repo.fetchCurrentSemesterCode() ?: return false.also { reloadFromCache() }
+        _ui.update { it.copy(currentSemesterCode = cur) }
+        val semesterChanged =
+            (previousUiCurrent != null && previousUiCurrent != cur) ||
+                priorMetaSemester != cur
+        if (!semesterChanged) {
+            reloadFromCache()
+            return false
+        }
+        val refreshSchedule = _ui.value.scheduleSemester.isNullOrBlank()
+        val refreshExam = _ui.value.examSemester.isNullOrBlank()
+        // 显式选中的历史学期保持不变；仅把仍指向「当前」的视图切到新学期
+        _ui.update {
+            it.copy(
+                scheduleSemester =
+                    if (refreshSchedule) null
+                    else it.scheduleSemester?.takeIf { code -> code != cur },
+                examSemester =
+                    if (refreshExam) null
+                    else it.examSemester?.takeIf { code -> code != cur },
+            )
+        }
+        return if (refreshSchedule || refreshExam) {
+            refreshAfterSemesterRollover(
+                refreshSchedule = refreshSchedule,
+                refreshExam = refreshExam,
+            )
+            true
+        } else {
+            reloadFromCache()
+            false
+        }
     }
 
     fun dismissUpdatePrompt() {
@@ -480,19 +513,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 检测到新学期时，拉取最新当前学期的课表与考试，避免显示旧学期数据。 */
-    private fun refreshCurrentSemesterData() {
-        viewModelScope.launch {
-            _ui.update {
-                it.copy(
-                    scheduleSemester = null,
-                    examSemester = null,
-                    courses = emptyList(),
-                    exams = emptyList(),
-                    contentLoading = true,
-                )
-            }
-            val cur = _ui.value.currentSemesterCode
+    /** 学期切换后按需拉取新「当前学期」数据；旧学期缓存按学期码保留。 */
+    private suspend fun refreshAfterSemesterRollover(
+        refreshSchedule: Boolean,
+        refreshExam: Boolean,
+    ) {
+        _ui.update {
+            it.copy(
+                courses = if (refreshSchedule) emptyList() else it.courses,
+                exams = if (refreshExam) emptyList() else it.exams,
+                contentLoading = true,
+            )
+        }
+        val cur = _ui.value.currentSemesterCode
+        if (refreshSchedule) {
             repo.refreshTimetable(forceNetwork = true, semesterCode = cur).fold(
                 onSuccess = {
                     reloadFromCache()
@@ -504,6 +538,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
             )
+        }
+        if (refreshExam) {
             repo.refreshExams().fold(
                 onSuccess = { reloadFromCache() },
                 onFailure = { e ->
@@ -513,6 +549,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
             )
         }
+        // 成绩整表刷新，历史学期码继续出现在筛选栏
+        repo.refreshGrades().fold(
+            onSuccess = { reloadFromCache() },
+            onFailure = { },
+        )
+        _ui.update { it.copy(contentLoading = false) }
     }
 
     fun applyWeekOneMonday(selectedDay: LocalDate) {
@@ -586,17 +628,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _ui.update { it.copy(userProfile = p) }
                 }
             }
-            if (hasSession && _ui.value.selectedTab == 0 && !repo.isOfflineImported()) {
+            if (!hasSession || repo.isOfflineImported()) return@launch
+            // 先处理学期切换，再校正教学周，避免「当前学期」仍指向已结束学期
+            val rolled = syncCurrentSemesterIfNeeded()
+            if (rolled) return@launch
+            if (_ui.value.selectedTab == 0) {
                 val before = _ui.value.timetableMeta
                 val synced = repo.syncCurrentTeachingWeek()
                 if (synced != null) {
+                    // meta 学期可能已变，但 UI 的 current 已在上方同步过
+                    if (synced.semesterCode != _ui.value.currentSemesterCode &&
+                        !_ui.value.currentSemesterCode.isNullOrBlank()
+                    ) {
+                        _ui.update { it.copy(currentSemesterCode = synced.semesterCode) }
+                    }
                     reloadFromCache()
                     if (synced.displayWeek != before?.displayWeek ||
-                        synced.currentWeek != before?.currentWeek
+                        synced.currentWeek != before?.currentWeek ||
+                        synced.semesterCode != before?.semesterCode
                     ) {
                         _ui.update { it.copy(timetablePagerScrollWeek = synced.displayWeek) }
-                    }
-                    if (synced.displayWeek != before?.displayWeek) {
                         loadTimetableWeek(synced.displayWeek)
                     }
                 }
@@ -634,7 +685,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _ui.update {
                 it.copy(contentLoading = true, message = null, loggedIn = true, showLogin = false)
             }
-            val activeSem = _ui.value.scheduleSemester?.takeIf { it.isNotBlank() }
+            // 刷新前先对齐当前学期，避免学期结束后仍按旧「当前」拉取
+            val rolled = syncCurrentSemesterIfNeeded()
+            if (rolled) {
+                val weekAfter = repo.cachedTimetableMeta()?.displayWeek
+                _ui.update {
+                    it.copy(
+                        contentLoading = false,
+                        loggedIn = true,
+                        userProfile = repo.cachedUserProfile(),
+                        message = refreshMessageForTab(tab, weekAfter),
+                    )
+                }
+                return@launch
+            }
+            val activeSem =
+                when (tab) {
+                    0 -> _ui.value.scheduleSemester?.takeIf { it.isNotBlank() }
+                    1 -> _ui.value.examSemester?.takeIf { it.isNotBlank() }
+                    else -> null
+                }
             repo.refreshForTab(tab, displayWeek, activeSem).fold(
                 onSuccess = {
                     reloadFromCache()
@@ -666,6 +736,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _ui.update { it.copy(contentLoading = true, message = null, loggedIn = true, showLogin = false) }
             repo.refreshAllAfterLogin().fold(
                 onSuccess = {
+                    val cur = repo.fetchCurrentSemesterCode()
+                    _ui.update {
+                        it.copy(
+                            currentSemesterCode = cur ?: it.currentSemesterCode,
+                            scheduleSemester = null,
+                            examSemester = null,
+                        )
+                    }
                     reloadFromCache()
                     _ui.update {
                         it.copy(
@@ -1031,7 +1109,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (repo.isOfflineImported()) {
                 emptyList()
             } else {
-                semesterOptionsFrom(grades, current)
+                semesterOptionsFrom(
+                    grades = grades,
+                    current = current,
+                    examSemesters = repo.cachedExamSemesters(),
+                    timetableSemesters = repo.cachedTimetableSemesters(),
+                )
             }
         _ui.update {
             it.copy(
@@ -1054,18 +1137,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun semesterOptionsFrom(
         grades: List<GradeItem>,
         current: String?,
+        examSemesters: List<String> = emptyList(),
+        timetableSemesters: List<String> = emptyList(),
     ): List<String> {
         val fromGrades =
             grades.map { it.semester }
                 .filter { it.isNotBlank() }
+        val historical =
+            (fromGrades + examSemesters + timetableSemesters)
+                .filter { it.isNotBlank() && it != current }
                 .distinct()
                 .sortedDescending()
-        val currentFirst = listOfNotNull(current)
-        val order =
-            (currentFirst + fromGrades)
-                .distinct()
-                .sortedBy { if (it == current) 0 else 1 }
-        return order
+        // 当前学期置顶（「当前学期」入口）；其余按编码降序作为历史学期
+        return listOfNotNull(current?.takeIf { it.isNotBlank() }) + historical
     }
 
     private fun isLoginCancelled(error: Throwable): Boolean {

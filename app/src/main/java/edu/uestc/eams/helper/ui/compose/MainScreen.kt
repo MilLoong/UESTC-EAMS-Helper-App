@@ -148,6 +148,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         onSelectGpaScope = { keys, selected ->
                             viewModel.setGradeKeysForGpa(keys, selected)
                         },
+                        currentSemesterCode = state.currentSemesterCode,
                         modifier = Modifier.fillMaxSize(),
                     )
                 else ->
