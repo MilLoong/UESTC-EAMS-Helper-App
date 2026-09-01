@@ -69,7 +69,11 @@ fun GradesTab(
                 SemesterBarSelection.All -> grades
                 SemesterBarSelection.Current -> {
                     val current = currentSemesterCode?.takeIf { it.isNotBlank() }
-                    if (current == null) grades else grades.filter { it.semester == current }
+                    if (current == null) {
+                        emptyList()
+                    } else {
+                        grades.filter { sameSemester(it.semester, current) }
+                    }
                 }
                 is SemesterBarSelection.Code -> grades.filter { it.semester == scope.value }
             }
@@ -112,7 +116,8 @@ fun GradesTab(
                 onSelect = { semesterScope = it },
                 showAllOption = true,
                 currentSemesterCode = currentSemesterCode,
-                showCurrentOption = !currentSemesterCode.isNullOrBlank(),
+                // 与考试页一致：即使当前学期码暂缺或该学期暂无成绩，也始终展示「当前学期」
+                showCurrentOption = true,
             )
         }
         item {
@@ -152,16 +157,37 @@ fun GradesTab(
                 )
             }
         }
-        items(scopedGrades, key = { GradeStatsCalculator.stableKey(it) }) { grade ->
-            val key = GradeStatsCalculator.stableKey(grade)
-            GradeCardRow(
-                grade = grade,
-                averageSelected = key in averageKeys,
-                gpaSelected = key in gpaKeys,
-                onToggleAverage = { onToggleAverage(key) },
-                onToggleGpa = { onToggleGpa(key) },
-                onClick = { detailGrade = grade },
-            )
+        if (scopedGrades.isEmpty()) {
+            item {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        when (semesterScope) {
+                            SemesterBarSelection.Current -> "暂无当前学期成绩"
+                            is SemesterBarSelection.Code -> "暂无该学期成绩"
+                            SemesterBarSelection.All -> "暂无成绩数据"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    )
+                }
+            }
+        } else {
+            items(scopedGrades, key = { GradeStatsCalculator.stableKey(it) }) { grade ->
+                val key = GradeStatsCalculator.stableKey(grade)
+                GradeCardRow(
+                    grade = grade,
+                    averageSelected = key in averageKeys,
+                    gpaSelected = key in gpaKeys,
+                    onToggleAverage = { onToggleAverage(key) },
+                    onToggleGpa = { onToggleGpa(key) },
+                    onClick = { detailGrade = grade },
+                )
+            }
         }
     }
 

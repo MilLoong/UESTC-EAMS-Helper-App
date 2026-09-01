@@ -20,10 +20,12 @@ import edu.uestc.eams.helper.data.auth.LoginUserMessages
 import edu.uestc.eams.helper.domain.grade.GradeStatsCalculator
 import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
+import edu.uestc.eams.helper.domain.model.SemesterCodes
 import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
+import edu.uestc.eams.helper.data.local.AcademicCache
 import edu.uestc.eams.helper.data.network.EamsFetchException
 import edu.uestc.eams.helper.data.parser.TeachingWeekEstimator
 import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
@@ -159,6 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val previousUiCurrent = _ui.value.currentSemesterCode
         val priorMetaSemester = repo.cachedTimetableMeta()?.semesterCode
         val cur = repo.fetchCurrentSemesterCode() ?: return false.also { reloadFromCache() }
+        repo.saveCurrentSemesterCode(cur)
         _ui.update { it.copy(currentSemesterCode = cur) }
         val semesterChanged =
             (previousUiCurrent != null && previousUiCurrent != cur) ||
@@ -260,6 +263,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 smsResendSecondsLeft = 0,
             )
         }
+    }
+
+    /** 退出登录：清会话与资料，保留课表/成绩/考试本地缓存。 */
+    fun logout() {
+        stopSmsResendCooldown()
+        cancelPendingSms()
+        repo.clearLoginSession()
+        _ui.update {
+            it.copy(
+                loggedIn = false,
+                userProfile = null,
+                showLogin = false,
+                loginStatus = null,
+                awaitingSms = false,
+                smsResendSecondsLeft = 0,
+                message = "已退出登录，本地课表与成绩仍保留",
+            )
+        }
+        reloadFromCache()
     }
 
     fun clearMessage() {
@@ -419,8 +441,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 仅切换课表所查看的学期；[code] 为 null 表示回到当前学期（不影响考试页）。 */
     fun selectScheduleSemester(code: String?) {
-        val current = _ui.value.currentSemesterCode
-        val isCurrent = code == null || (current != null && code == current)
+        val current = resolveCurrentSemesterCode()
+        val isCurrent = code == null || SemesterCodes.same(code, current)
         if (isCurrent) {
             _ui.update {
                 it.copy(
@@ -450,8 +472,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 仅切换考试所查看的学期；[code] 为 null 表示回到当前学期（不影响课表页）。 */
     fun selectExamSemester(code: String?) {
-        val current = _ui.value.currentSemesterCode
-        val isCurrent = code == null || (current != null && code == current)
+        val current = resolveCurrentSemesterCode()
+        val isCurrent = code == null || SemesterCodes.same(code, current)
         val target =
             if (isCurrent) {
                 current?.takeIf { it.isNotBlank() }
@@ -737,6 +759,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repo.refreshAllAfterLogin().fold(
                 onSuccess = {
                     val cur = repo.fetchCurrentSemesterCode()
+                    if (!cur.isNullOrBlank()) {
+                        repo.saveCurrentSemesterCode(cur)
+                    }
                     _ui.update {
                         it.copy(
                             currentSemesterCode = cur ?: it.currentSemesterCode,
@@ -1078,7 +1103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val meta = repo.cachedTimetableMeta()
         val grades = repo.cachedGrades()
         val gradeSelection = syncGradeSelections(grades)
-        val current = _ui.value.currentSemesterCode
+        val current = resolveCurrentSemesterCode()
         val scheduleChoice = _ui.value.scheduleSemester
         val examChoice = _ui.value.examSemester
         val scheduleDisplay =
@@ -1134,6 +1159,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** UI / 缓存 / 课表 meta 依次取当前学期，保证成绩栏也能显示「当前学期」。 */
+    private fun resolveCurrentSemesterCode(): String? {
+        _ui.value.currentSemesterCode?.takeIf { it.isNotBlank() }?.let { return it }
+        repo.cachedCurrentSemesterCode()?.takeIf { it.isNotBlank() }?.let { return it }
+        return repo.cachedTimetableMeta()?.semesterCode?.takeIf {
+            it.isNotBlank() && it != AcademicCache.IMPORT_SEMESTER
+        }
+    }
+
     private fun semesterOptionsFrom(
         grades: List<GradeItem>,
         current: String?,
@@ -1145,7 +1179,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .filter { it.isNotBlank() }
         val historical =
             (fromGrades + examSemesters + timetableSemesters)
-                .filter { it.isNotBlank() && it != current }
+                .filter { it.isNotBlank() && !SemesterCodes.same(it, current) }
                 .distinct()
                 .sortedDescending()
         // 当前学期置顶（「当前学期」入口）；其余按编码降序作为历史学期

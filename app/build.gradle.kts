@@ -32,8 +32,8 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 46
-        versionName = "1.3.5"
+        versionCode = 47
+        versionName = "1.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

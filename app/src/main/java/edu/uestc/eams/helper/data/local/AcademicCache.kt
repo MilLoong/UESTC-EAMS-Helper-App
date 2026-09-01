@@ -177,6 +177,15 @@ class AcademicCache(context: Context) {
         prefs.edit().remove(KEY_PROFILE).apply()
     }
 
+    fun saveCurrentSemesterCode(code: String) {
+        val t = code.trim()
+        if (t.isEmpty()) return
+        prefs.edit().putString(KEY_CURRENT_SEMESTER, t).apply()
+    }
+
+    fun loadCurrentSemesterCode(): String? =
+        prefs.getString(KEY_CURRENT_SEMESTER, null)?.takeIf { it.isNotBlank() }
+
     fun setOfflineImported(imported: Boolean) {
         prefs.edit().putBoolean(KEY_OFFLINE_IMPORTED, imported).apply()
     }
@@ -195,6 +204,7 @@ class AcademicCache(context: Context) {
         private const val KEY_EXAMS = "exams"
         private const val KEY_EXAMS_BY_SEMESTER = "exams_by_semester"
         private const val KEY_PROFILE = "user_profile"
+        private const val KEY_CURRENT_SEMESTER = "current_semester_code"
         private const val KEY_OFFLINE_IMPORTED = "offline_wakeup_import"
     }
 }

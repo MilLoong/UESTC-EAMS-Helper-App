@@ -94,6 +94,7 @@ class UestcRepository(
                 val semester =
                     semesterCode
                         ?: api.fetchCurSemesterCode(ck)
+                            ?.also { cache.saveCurrentSemesterCode(it) }
                         ?: cache.loadTimetableMeta()?.semesterCode
                         ?: "25262"
                 val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
@@ -156,6 +157,7 @@ class UestcRepository(
                 val ck = ensureMobileCookieHeader()
                 val semester =
                     api.fetchCurSemesterCode(ck)
+                        ?.also { cache.saveCurrentSemesterCode(it) }
                         ?: cache.loadTimetableMeta()?.semesterCode
                         ?: return@runCatching null
                 val apiWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching null
@@ -242,7 +244,7 @@ class UestcRepository(
         runUserDataFetch {
             withContext(Dispatchers.IO) {
                 val ck = ensureMobileCookieHeader()
-                val sem = semester ?: (api.fetchCurSemesterCode(ck) ?: "25262")
+                val sem = semester ?: (api.fetchCurSemesterCode(ck)?.also { cache.saveCurrentSemesterCode(it) } ?: "25262")
                 val code = api.resolveStudentCode(ck)
                 val json =
                     api.fetchExamQueryJson(ck, sem, code)
@@ -317,6 +319,8 @@ class UestcRepository(
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
     fun cachedExamSemesters(): List<String> = cache.examSemesters()
     fun cachedTimetableSemesters(): List<String> = cache.timetableSemesters()
+    fun cachedCurrentSemesterCode(): String? = cache.loadCurrentSemesterCode()
+    fun saveCurrentSemesterCode(code: String) = cache.saveCurrentSemesterCode(code)
     fun isOfflineImported(): Boolean = cache.isOfflineImported()
 
     /** 从 WakeUp 导出的 HTML 导入课表并覆盖本地缓存；[weekOneMonday] 为第 1 教学周周一。 */
@@ -385,7 +389,7 @@ class UestcRepository(
             if (!hasLocalSession()) return@withContext null
             runCatching {
                 val ck = ensureMobileCookieHeader()
-                api.fetchCurSemesterCode(ck)
+                api.fetchCurSemesterCode(ck)?.also { cache.saveCurrentSemesterCode(it) }
             }.getOrNull()
         }
 

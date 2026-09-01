@@ -25,22 +25,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import edu.uestc.eams.helper.domain.model.SemesterCodes
 
 /** 把教务学期编码格式化为可读标签。 */
-internal fun semesterLabel(code: String): String {
-    val t = code.trim()
-    if (t.length == 5 && t.all { it.isDigit() }) {
-        val y1 = t.substring(0, 2).toIntOrNull()
-        val y2 = t.substring(2, 4).toIntOrNull()
-        val s = t.substring(4).toIntOrNull()
-        if (y1 != null && y2 != null && s != null) {
-            val start = if (y1 < 100) 2000 + y1 else y1
-            val end = if (y2 < 100) 2000 + y2 else y2
-            return "${start}-${end} 第${s}学期"
-        }
-    }
-    return t
-}
+internal fun semesterLabel(code: String): String = SemesterCodes.label(code)
+
+internal fun canonicalSemesterKey(code: String): String = SemesterCodes.canonicalKey(code)
+
+internal fun sameSemester(a: String?, b: String?): Boolean = SemesterCodes.same(a, b)
 
 /** 学期选择栏选中态：全部 / 当前学期 / 指定学期编码。 */
 internal sealed interface SemesterBarSelection {
@@ -62,7 +54,7 @@ internal fun SemesterSelectBar(
 ) {
     val chips =
         if (showCurrentOption && !currentSemesterCode.isNullOrBlank()) {
-            semesterOptions.filter { it != currentSemesterCode }
+            semesterOptions.filter { !sameSemester(it, currentSemesterCode) }
         } else {
             semesterOptions
         }
@@ -141,11 +133,11 @@ private fun SemesterDropdownMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         val selectable =
-            semesterOptions.filter { it != currentSemesterCode }
+            semesterOptions.filter { !sameSemester(it, currentSemesterCode) }
         DropdownMenuItem(
             text = { Text("当前学期") },
             leadingIcon =
-                if (activeSemesterCode == null || activeSemesterCode == currentSemesterCode) {
+                if (activeSemesterCode == null || sameSemester(activeSemesterCode, currentSemesterCode)) {
                     { Icon(Icons.Filled.Check, contentDescription = null) }
                 } else {
                     null
