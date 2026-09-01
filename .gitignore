@@ -20,3 +20,8 @@ signing/*.keystore
 signing/github-secrets-local.txt
 /.ddoge_ref/
 .kotlin/
+.local/
+
+# Local reference clones; the workspace root is the actual app repository.
+/UESTC-EAMS-Helper-App/
+/UESTC-EAMS-Helper-Python/

@@ -102,7 +102,7 @@ class CasLoginRepository(
                     else -> "请查收短信或点 重新发送验证码。"
                 }
             lines += msg
-            lines += "填写后点对话框中的 登录。"
+            lines += "填写后点对话框中的 提交验证码。"
             return lines.joinToString("\n")
         }
 
