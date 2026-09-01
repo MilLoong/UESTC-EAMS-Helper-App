@@ -20,6 +20,7 @@ import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.GradesSummary
 import edu.uestc.eams.helper.domain.model.TimetableMeta
+import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
 import java.time.LocalDate
