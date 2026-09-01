@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,12 +41,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,9 +60,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
@@ -64,7 +67,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
@@ -72,6 +74,7 @@ import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.parser.AdjacentCourseMerge
 import edu.uestc.eams.helper.data.parser.CourseWeekFilter
+import edu.uestc.eams.helper.data.parser.PeriodOverlapResolver
 import edu.uestc.eams.helper.data.parser.WeekSpec
 import edu.uestc.eams.helper.data.prefs.TimetableCourseNameMode
 import edu.uestc.eams.helper.data.prefs.TimetableLayoutSettings
@@ -79,7 +82,10 @@ import edu.uestc.eams.helper.domain.model.TimetableMeta
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import java.time.LocalDate
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /** 课表块深浅两色，每两节一组交替。 */
 @Composable
@@ -102,85 +108,14 @@ private val weekStateLabelWidth = 48.dp
 private const val MIN_GRID_ZOOM = 0.6f
 private const val MAX_GRID_ZOOM = 1.7f
 
-/** 边缘继续拖动超过该距离（px）则切周。 */
-private const val WEEK_EDGE_DRAG_PX = 88f
-
-/** 边缘惯性滑动速度超过该值（px/s）则切周。 */
-private const val WEEK_EDGE_FLING_VX = 900f
-
-/**
- * 课表边缘切周：子布局先消费横向滚动；滚不动的剩余位移/速度交给这里。
- * 双指缩放时由外层 [pinching] 短路，避免与 pinch 抢手势。
- */
-private class WeekEdgeNestedScrollConnection(
-    private val pinching: () -> Boolean,
-    private val onPrevWeek: () -> Unit,
-    private val onNextWeek: () -> Unit,
-) : NestedScrollConnection {
-    private var overscrollX = 0f
-    private var triggered = false
-
-    fun resetGesture() {
-        overscrollX = 0f
-        triggered = false
-    }
-
-    override fun onPostScroll(
-        consumed: Offset,
-        available: Offset,
-        source: NestedScrollSource,
-    ): Offset {
-        if (pinching() || source != NestedScrollSource.UserInput) return Offset.Zero
-        if (consumed.x != 0f) {
-            overscrollX = 0f
-            triggered = false
-        }
-        if (available.x == 0f || triggered) return Offset.Zero
-        overscrollX += available.x
-        when {
-            overscrollX >= WEEK_EDGE_DRAG_PX -> {
-                triggered = true
-                overscrollX = 0f
-                onPrevWeek()
-            }
-            overscrollX <= -WEEK_EDGE_DRAG_PX -> {
-                triggered = true
-                overscrollX = 0f
-                onNextWeek()
-            }
-        }
-        return Offset.Zero
-    }
-
-    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        if (pinching()) {
-            resetGesture()
-            return Velocity.Zero
-        }
-        val vx = available.x
-        val handled =
-            when {
-                triggered -> true
-                vx >= WEEK_EDGE_FLING_VX || overscrollX >= WEEK_EDGE_DRAG_PX -> {
-                    onPrevWeek()
-                    true
-                }
-                vx <= -WEEK_EDGE_FLING_VX || overscrollX <= -WEEK_EDGE_DRAG_PX -> {
-                    onNextWeek()
-                    true
-                }
-                else -> false
-            }
-        resetGesture()
-        return if (handled) available.copy(y = 0f) else Velocity.Zero
-    }
-}
-
 /** 精简版课程名最多 4 个字；允许换行，保证在窄卡片里也能完整显示。 */
 private const val COMPACT_NAME_MAX_LINES = 2
 
 /** 周选择列表至少提供的范围（常见学期长度）。 */
 private const val WEEK_PICKER_MIN_RANGE = 20
+
+/** 固定可滑动周次下限；不按课程周次字段上限截断，避免排到第 16 周就无法往后浏览。 */
+private const val TIMETABLE_PAGE_COUNT = 30
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -194,11 +129,13 @@ fun ScheduleTab(
     currentSemesterCode: String? = null,
     isCurrentSemester: Boolean = true,
     onSemesterSelect: (String?) -> Unit = {},
+    pagerScrollWeek: Int? = null,
     modifier: Modifier = Modifier,
     onPrevWeek: () -> Unit = {},
     onNextWeek: () -> Unit = {},
     onGoCurrentWeek: () -> Unit = {},
     onSelectWeek: (Int) -> Unit = {},
+    onPagerScrollConsumed: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onLayoutChange: (TimetableLayoutSettings) -> Unit = {},
 ) {
@@ -226,11 +163,26 @@ fun ScheduleTab(
                     ?: 1
             maxOf(fromCourses, currentWeek, displayWeek).coerceAtLeast(WEEK_PICKER_MIN_RANGE)
         }
-
+    val pageCount = maxOf(maxWeek, TIMETABLE_PAGE_COUNT)
+    val initialPage = (displayWeek - 1).coerceIn(0, pageCount - 1)
+    val pagerState =
+        rememberPagerState(
+            initialPage = initialPage,
+            pageCount = { pageCount },
+        )
+    val pagerScope = rememberCoroutineScope()
+    // 滑动过程中周次跟随偏移，恢复 1.2.x 丝滑切周的标题反馈。
+    val headerWeek by remember(pageCount) {
+        derivedStateOf {
+            (pagerState.currentPage + pagerState.currentPageOffsetFraction + 1f)
+                .roundToInt()
+                .coerceIn(1, pageCount)
+        }
+    }
     val weekMonday =
-        remember(displayWeek, currentWeek, weekOneMonday) {
+        remember(headerWeek, currentWeek, weekOneMonday) {
             TimetableWeekCalendar.mondayOfDisplayedWeek(
-                displayWeek,
+                headerWeek,
                 currentWeek,
                 today,
                 weekOneMonday,
@@ -244,6 +196,23 @@ fun ScheduleTab(
         TimetableWeekCalendar.formatHeaderDate(weekMonday) +
             " - " +
             TimetableWeekCalendar.formatHeaderDate(weekMonday.plusDays(6))
+
+    LaunchedEffect(pagerScrollWeek, pageCount) {
+        val week = pagerScrollWeek ?: return@LaunchedEffect
+        val target = (week - 1).coerceIn(0, pageCount - 1)
+        if (pagerState.currentPage != target || pagerState.targetPage != target) {
+            pagerState.animateScrollToPage(target)
+        }
+        onPagerScrollConsumed()
+    }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                onSelectWeek(page + 1)
+            }
+    }
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -277,15 +246,13 @@ fun ScheduleTab(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    // 仅当不在当前周时显示「回本周」；本周则不显示任何状态文字。
                     val showWeekState = isCurrentSemester && !isCurrentWeek
-                    // 左侧等宽占位 + 右侧等宽标签，使「第X周」居中，而「回本周」紧跟其后。
                     if (showWeekState) {
                         Spacer(Modifier.width(weekStateLabelWidth))
                     }
                     Box {
                         Text(
-                            "第${displayWeek}周",
+                            "第${headerWeek}周",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -310,13 +277,17 @@ fun ScheduleTab(
                                     DropdownMenuItem(
                                         text = { Text("第${week}周") },
                                         leadingIcon =
-                                            if (week == displayWeek) {
+                                            if (week == headerWeek) {
                                                 { Icon(Icons.Filled.Check, contentDescription = null) }
                                             } else {
                                                 null
                                             },
                                         onClick = {
                                             weekMenuExpanded = false
+                                            val target = (week - 1).coerceIn(0, pageCount - 1)
+                                            pagerScope.launch {
+                                                pagerState.animateScrollToPage(target)
+                                            }
                                             onSelectWeek(week)
                                         },
                                     )
@@ -358,27 +329,33 @@ fun ScheduleTab(
         }
         HorizontalDivider()
         Box(Modifier.weight(1f)) {
-            ScheduleWeekPage(
-                weekNumber = displayWeek,
-                courses = courses,
-                currentWeek = currentWeek,
-                today = today,
-                weekOneMonday = weekOneMonday,
-                gridLayout = layout,
-                isCurrentSemester = isCurrentSemester,
-                courseClicksEnabled = !gridPinching,
-                onCourseClick = { detailCourse = it },
-                onPrevWeek = onPrevWeek,
-                onNextWeek = onNextWeek,
-                gridPinching = gridPinching,
-                onGridPinchCommit = { factor ->
-                    if (abs(factor - 1f) > 0.01f) {
-                        onLayoutChange(layout.scaledGridBy(factor))
-                    }
-                },
-                onGridPinchingChange = { gridPinching = it },
+            // HorizontalPager 提供丝滑切周；页内放大后横滑到边缘，剩余位移交给 Pager。
+            // 双指缩放时关闭 Pager 用户滑动，避免与 pinch 冲突。
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier.fillMaxSize(),
-            )
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !gridPinching,
+            ) { page ->
+                ScheduleWeekPage(
+                    weekNumber = page + 1,
+                    courses = courses,
+                    currentWeek = currentWeek,
+                    today = today,
+                    weekOneMonday = weekOneMonday,
+                    gridLayout = layout,
+                    isCurrentSemester = isCurrentSemester,
+                    courseClicksEnabled = !gridPinching,
+                    onCourseClick = { detailCourse = it },
+                    onGridPinchCommit = { factor ->
+                        if (abs(factor - 1f) > 0.01f) {
+                            onLayoutChange(layout.scaledGridBy(factor))
+                        }
+                    },
+                    onGridPinchingChange = { gridPinching = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             if (showSetupHint) {
                 EmptyHint(
                     "暂无课表\n请到「我的」页登录、网页登录或导入课表文件",
@@ -444,9 +421,6 @@ private fun ScheduleWeekPage(
     isCurrentSemester: Boolean = true,
     courseClicksEnabled: Boolean = true,
     onCourseClick: (UestcCourse) -> Unit,
-    onPrevWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    gridPinching: Boolean,
     onGridPinchCommit: (Float) -> Unit,
     onGridPinchingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -462,7 +436,9 @@ private fun ScheduleWeekPage(
         }
     val visible =
         remember(courses, weekNumber) {
-            AdjacentCourseMerge.merge(CourseWeekFilter.filterForWeek(courses, weekNumber))
+            val filtered = CourseWeekFilter.filterForWeek(courses, weekNumber)
+            // 先合并真正相邻的同名课；再裁掉叠在一起的节次，避免深色底拖到下一截课下面。
+            PeriodOverlapResolver.resolve(AdjacentCourseMerge.merge(filtered))
         }
     val byDay = remember(visible) { visible.groupBy { it.weekday } }
     val vScroll = rememberScrollState()
@@ -476,17 +452,6 @@ private fun ScheduleWeekPage(
         }
     val latestOnGridPinchCommit by rememberUpdatedState(onGridPinchCommit)
     val latestOnGridPinchingChange by rememberUpdatedState(onGridPinchingChange)
-    val latestOnPrevWeek by rememberUpdatedState(onPrevWeek)
-    val latestOnNextWeek by rememberUpdatedState(onNextWeek)
-    val latestPinching by rememberUpdatedState(gridPinching)
-    val weekEdgeScroll =
-        remember {
-            WeekEdgeNestedScrollConnection(
-                pinching = { latestPinching },
-                onPrevWeek = { latestOnPrevWeek() },
-                onNextWeek = { latestOnNextWeek() },
-            )
-        }
 
     BoxWithConstraints(modifier) {
         val timeColumnWidth = gridLayout.timeColumnWidthDp.dp
@@ -499,6 +464,9 @@ private fun ScheduleWeekPage(
         val fontScale = displayLayout.fontScale
         val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
         val dayGridWidth = dayColumnWidth * 7
+        // 未放大（铺满宽度）时不挂横滑，手势直接给外层 Pager，手感与 1.2.x 一致；
+        // 放大后先页内横滑，到边缘再由 nested scroll 交给 Pager。
+        val canScrollHorizontally = dayGridWidth > daysAvailWidth + 0.5.dp
 
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -512,7 +480,13 @@ private fun ScheduleWeekPage(
                 Row(
                     Modifier
                         .weight(1f)
-                        .horizontalScroll(hScroll),
+                        .then(
+                            if (canScrollHorizontally) {
+                                Modifier.horizontalScroll(hScroll)
+                            } else {
+                                Modifier
+                            },
+                        ),
                 ) {
                     Row(Modifier.width(dayGridWidth)) {
                         for (d in 1..7) {
@@ -556,14 +530,18 @@ private fun ScheduleWeekPage(
                             }
                         }
                     }
-                    // nestedScroll 在滚动修饰符外侧：子布局先横滑；到边缘后剩余手势用于切周。
-                    // 双指缩放仍只在网格 pointerInput 内处理，pinching 时切周短路。
+                    // 页内横滑；到边缘后剩余位移交给外层 HorizontalPager 丝滑切周。
                     Box(
                         Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .nestedScroll(weekEdgeScroll)
-                            .horizontalScroll(hScroll)
+                            .then(
+                                if (canScrollHorizontally) {
+                                    Modifier.horizontalScroll(hScroll)
+                                } else {
+                                    Modifier
+                                },
+                            )
                             .verticalScroll(vScroll),
                     ) {
                         Box(
@@ -581,7 +559,6 @@ private fun ScheduleWeekPage(
                                             if (pressed.size >= 2) {
                                                 if (!pinching) {
                                                     pinching = true
-                                                    weekEdgeScroll.resetGesture()
                                                     latestOnGridPinchingChange(true)
                                                 }
                                                 val a = pressed[0].position
@@ -611,8 +588,6 @@ private fun ScheduleWeekPage(
                                             val factor = gestureScale
                                             gestureScale = 1f
                                             latestOnGridPinchCommit(factor)
-                                        } else {
-                                            weekEdgeScroll.resetGesture()
                                         }
                                     }
                                 }
@@ -647,64 +622,6 @@ private fun ScheduleWeekPage(
                 }
             }
         }
-    }
-}
-
-private fun scaledSp(base: Float, fontScale: Float) = (base * fontScale).sp
-
-/** 网纹背景：按节次行高/列宽叠加淡灰色横竖线，不改变配色。 */
-@Composable
-private fun Modifier.timetableGridMesh(
-    show: Boolean,
-    rowHeight: Dp,
-    columnWidth: Dp,
-): Modifier {
-    if (!show) return this
-    val lineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
-    return drawBehind {
-        val rowPx = rowHeight.toPx()
-        val colPx = columnWidth.toPx()
-        var y = rowPx
-        while (y < size.height) {
-            drawLine(lineColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
-            y += rowPx
-        }
-        var x = colPx
-        while (x < size.width) {
-            drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
-            x += colPx
-        }
-    }
-}
-
-@Composable
-private fun Modifier.timetableNoonDivider(show: Boolean, rowHeight: Dp): Modifier {
-    if (!show) return this
-    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-    return drawBehind {
-        val y = rowHeight.toPx() * UestcPeriodTime.NOON_DIVIDER_AFTER_PERIOD
-        drawLine(
-            color = dividerColor,
-            start = Offset(0f, y),
-            end = Offset(size.width, y),
-            strokeWidth = 2.dp.toPx(),
-        )
-    }
-}
-
-/** 中午分隔条：绘制在课程块之上，且上下各留一段背景色空隙，避免被卡片盖住而看不清。 */
-@Composable
-private fun Modifier.timetableNoonSeparator(show: Boolean, rowHeight: Dp): Modifier {
-    if (!show) return this
-    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.85f)
-    val bandColor = MaterialTheme.colorScheme.background
-    return drawWithContent {
-        drawContent()
-        val y = rowHeight.toPx() * UestcPeriodTime.NOON_DIVIDER_AFTER_PERIOD
-        val band = 4.dp.toPx()
-        val line = 2.dp.toPx()
-        drawRect(bandColor, topLeft = Offset(0f, y - band / 2f), size = Size(size.width, band))
-        drawLine(dividerColor, Offset(0f, y), Offset(size.width, y), strokeWidth = line)
     }
 }
 
@@ -898,7 +815,7 @@ private fun CourseCard(
     Column(
         modifier =
             modifier
-                .padding(horizontal = 1.dp, vertical = 1.dp)
+                .padding(horizontal = 1.dp, vertical = 2.dp)
                 .clip(MaterialTheme.shapes.extraSmall)
                 .background(background)
                 .then(borderModifier)

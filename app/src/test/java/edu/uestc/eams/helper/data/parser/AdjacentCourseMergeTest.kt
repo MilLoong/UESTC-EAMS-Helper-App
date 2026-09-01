@@ -33,11 +33,51 @@ class AdjacentCourseMergeTest {
         assertEquals(2, os.size)
     }
 
+    @Test
+    fun does_not_merge_across_noon_break() {
+        val courses =
+            listOf(
+                course(id = "a", name = "中国哲学经典著作选读", period = 3, end = 4),
+                course(id = "b", name = "中国哲学经典著作选读", period = 5, end = 6),
+            )
+        val merged = AdjacentCourseMerge.merge(courses)
+        assertEquals(2, merged.size)
+        assertEquals(3, merged[0].period)
+        assertEquals(4, merged[0].endPeriod)
+        assertEquals(5, merged[1].period)
+        assertEquals(6, merged[1].endPeriod)
+    }
+
+    @Test
+    fun overlap_resolver_clips_taller_block_under_later_course() {
+        val courses =
+            listOf(
+                course(id = "a", name = "中国哲学经典著作选读", period = 1, end = 4, weeks = "1-16"),
+                course(
+                    id = "b",
+                    name = "中国哲学经典著作选读",
+                    period = 3,
+                    end = 4,
+                    weeks = "",
+                ),
+            )
+        // weeks 不同 → 合并不成，仍是两块重叠
+        val merged = AdjacentCourseMerge.merge(courses)
+        assertEquals(2, merged.size)
+        val resolved = PeriodOverlapResolver.resolve(merged)
+        assertEquals(2, resolved.size)
+        assertEquals(1, resolved[0].period)
+        assertEquals(2, resolved[0].endPeriod)
+        assertEquals(3, resolved[1].period)
+        assertEquals(4, resolved[1].endPeriod)
+    }
+
     private fun course(
         id: String,
         period: Int,
         end: Int = period,
         name: String = "操作系统",
+        weeks: String = "1-13",
     ): UestcCourse =
         UestcCourse(
             courseName = name,
@@ -46,7 +86,7 @@ class AdjacentCourseMergeTest {
             weekday = 1,
             period = period,
             endPeriod = end,
-            weeks = "1-13",
+            weeks = weeks,
             courseId = id,
             startTime = "19:00",
             endTime = "22:15",
