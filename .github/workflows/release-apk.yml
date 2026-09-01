@@ -1,8 +1,8 @@
 # 推送 v* 标签后自动构建 APK 并发布到 GitHub Releases。
-# 源码仓库：UESTC-EAMS-Helper；Release 目标：UESTC-EAMS-Helper-App（与应用内更新检查一致）。
+# 源码与 Release 仓库：UESTC-EAMS-Helper-App（与应用内更新检查一致）。
 #
-# 一次性配置：在源码仓库 Settings → Secrets → Actions 添加
-#   RELEASE_REPO_TOKEN = 对 UESTC-EAMS-Helper-App 有 repo 权限的 PAT
+# 一次性配置：在仓库 Settings → Secrets → Actions 添加
+#   RELEASE_REPO_TOKEN = 对本仓库有 repo 权限的 PAT（也可用于跨仓发版）
 #   UPLOAD_KEYSTORE_BASE64 / UPLOAD_STORE_PASSWORD / UPLOAD_KEY_ALIAS
 #   见仓库根目录 keystore.properties.example
 #

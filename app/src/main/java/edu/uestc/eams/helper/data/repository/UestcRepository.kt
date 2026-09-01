@@ -19,6 +19,7 @@ import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.GradesSummary
 import edu.uestc.eams.helper.domain.model.TimetableMeta
+import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
 import java.time.LocalDate
@@ -96,16 +97,15 @@ class UestcRepository(
                         ?: cache.loadTimetableMeta()?.semesterCode
                         ?: "25262"
                 val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
-                val displayWeek = week?.coerceAtLeast(1) ?: currentWeek
                 val prior = cache.loadTimetableMeta()
-                val bumpDisplay =
-                    week == null &&
-                        prior != null &&
-                        prior.semesterCode == semester &&
-                        prior.displayWeek == prior.currentWeek &&
-                        prior.currentWeek != currentWeek
-                val resolvedDisplay = if (bumpDisplay) currentWeek else displayWeek
                 val sameSemester = prior?.semesterCode == semester
+                val displayWeek =
+                    week?.coerceAtLeast(1)
+                        ?: resolveDisplayWeekAfterSync(
+                            prior = prior,
+                            sameSemester = sameSemester,
+                            currentWeek = currentWeek,
+                        )
                 val weekOneMonday =
                     TeachingWeekEstimator.resolvePersistedWeekOneMonday(
                         stored = prior?.takeIf { sameSemester }?.weekOneMondayDate(),
@@ -117,12 +117,12 @@ class UestcRepository(
                     TimetableMeta(
                         semesterCode = semester,
                         currentWeek = currentWeek,
-                        displayWeek = resolvedDisplay,
+                        displayWeek = displayWeek,
                         weekOneMonday = weekOneMonday,
                         weekOneLocked = sameSemester && prior?.weekOneLocked == true,
                     )
 
-                val fetchWeek = resolvedDisplay
+                val fetchWeek = displayWeek
                 if (!forceNetwork) {
                     cache.loadWeekCourses(semester, fetchWeek)?.let {
                         cache.saveTimetableMeta(meta)
@@ -173,17 +173,12 @@ class UestcRepository(
                         TeachingWeekEstimator.teachingWeekForDate(anchor, LocalDate.now())
                     }
                 val currentWeek = maxOf(apiWeek, calendarWeek)
-                val bumpDisplay =
-                    prior != null &&
-                        sameSemester &&
-                        prior.displayWeek == prior.currentWeek &&
-                        prior.currentWeek != currentWeek
                 val displayWeek =
-                    if (bumpDisplay) {
-                        currentWeek
-                    } else {
-                        prior?.displayWeek ?: currentWeek
-                    }
+                    resolveDisplayWeekAfterSync(
+                        prior = prior,
+                        sameSemester = sameSemester,
+                        currentWeek = currentWeek,
+                    )
                 val meta =
                     TimetableMeta(
                         semesterCode = semester,
@@ -196,6 +191,18 @@ class UestcRepository(
                 meta
             }.getOrNull()
         }
+
+    /**
+     * 冷启动时把显示周对齐到「今天」所在教学周，避免仍停在上次退出时浏览的周次。
+     */
+    fun alignTimetableDisplayToToday(): TimetableMeta? {
+        val meta = cache.loadTimetableMeta() ?: return null
+        val todayWeek = meta.teachingWeekOn(LocalDate.now()).coerceAtLeast(1)
+        if (meta.displayWeek == todayWeek && meta.currentWeek == todayWeek) return meta
+        val updated = meta.copy(currentWeek = todayWeek, displayWeek = todayWeek)
+        cache.saveTimetableMeta(updated)
+        return updated
+    }
 
     /** 后台每日同步当前教学周课表：当日已同步且本地有缓存则不联网；无本地会话则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =
@@ -391,6 +398,20 @@ class UestcRepository(
         val hdr = EamsAppCookie.composeFromJar(jar, jwt)
         sessionStorage.persistFromJar(jar)
         return hdr
+    }
+
+    /**
+     * 同步后显示哪一周：换学期或上次就在看「本周」时跟到 currentWeek；
+     * 同学期内若上次特意翻到其它周，则保留。
+     */
+    private fun resolveDisplayWeekAfterSync(
+        prior: TimetableMeta?,
+        sameSemester: Boolean,
+        currentWeek: Int,
+    ): Int {
+        if (prior == null || !sameSemester) return currentWeek
+        if (prior.displayWeek == prior.currentWeek) return currentWeek
+        return prior.displayWeek.coerceAtLeast(1)
     }
 
     private suspend fun <T> runUserDataFetch(block: suspend () -> T): Result<T> =

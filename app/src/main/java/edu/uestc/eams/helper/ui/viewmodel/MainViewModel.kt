@@ -115,6 +115,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         reloadFromCache()
+        repo.alignTimetableDisplayToToday()?.let { aligned ->
+            reloadFromCache()
+            _ui.update { it.copy(timetablePagerScrollWeek = aligned.displayWeek) }
+            if (repo.hasLocalSession() && !repo.isOfflineImported()) {
+                loadTimetableWeek(aligned.displayWeek)
+            }
+        }
         viewModelScope.launch {
             val hasSession = repo.hasLocalSession()
             _ui.update { current ->
