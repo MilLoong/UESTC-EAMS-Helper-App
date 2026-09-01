@@ -27,7 +27,16 @@ object BladeJson {
         }
     }
 
+    /** 登录页 / 网关壳等 HTML 响应（常见于 HTTP 200 但会话已失效）。 */
+    fun looksLikeHtml(bodyText: String): Boolean {
+        val t = bodyText.trimStart()
+        if (t.isEmpty()) return false
+        return t.startsWith("<") ||
+            t.regionMatches(0, "<!DOCTYPE", 0, 9, ignoreCase = true)
+    }
+
     fun responseOk(response: Response, bodyText: String): Boolean {
+        if (looksLikeHtml(bodyText)) return false
         if (response.code in 200..299) {
             if (bodyText.trim().isEmpty()) return false
             val el = parseApiBody(bodyText) ?: return false

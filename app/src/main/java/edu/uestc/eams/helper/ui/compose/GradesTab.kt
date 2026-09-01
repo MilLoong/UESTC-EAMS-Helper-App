@@ -405,9 +405,19 @@ private fun GradeDetailBottomSheet(
                 grade.scoreParts.forEach { part ->
                     GradeDetailLine("${part.label}：${part.value}")
                 }
+            } else {
+                GradeDetailLine("总评：${grade.totalScoreDisplay()}")
             }
-            GradeDetailLine("总评：${grade.totalScoreDisplay()}")
-            GradeDetailLine("成绩：${grade.score}")
+            val totalDisplay = grade.totalScoreDisplay()
+            val scoreText = grade.score.trim()
+            if (
+                scoreText.isNotEmpty() &&
+                scoreText != "-" &&
+                scoreText != totalDisplay &&
+                grade.scoreParts.none { it.label == "总评" && it.value.trim() == scoreText }
+            ) {
+                GradeDetailLine("成绩：$scoreText")
+            }
             GradeDetailLine("学分：${grade.credit}")
             GradeDetailLine("绩点：${grade.gradePoint}")
             if (grade.examMode.isNotBlank()) {

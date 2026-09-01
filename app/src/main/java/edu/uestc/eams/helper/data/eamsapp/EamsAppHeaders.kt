@@ -25,7 +25,7 @@ fun mobileApiHeaders(cookieHeader: String): Map<String, String> {
             .takeIf { EamsAppCookie.looksLikeJwt(it) }
             .orEmpty()
     return mapOf(
-        "Accept" to "*/*",
+        "Accept" to "application/json, text/plain, */*",
         "Accept-Language" to "zh-CN,zh;q=0.9,en;q=0.8",
         "Authorization" to "Basic ${ApiConstants.EAMSAPP_AUTHORIZATION_BASIC}",
         "Content-Type" to "application/x-www-form-urlencoded;charset=utf-8",

@@ -428,20 +428,19 @@ fun ProfileTab(
             ) {
                 Text("检查更新")
             }
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            Text("开源", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        }
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("开源", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 "成电教务助手",
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = 8.dp),
             )
             Text(
                 "https://github.com/MilLoong/UESTC-EAMS-Helper-App",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                modifier = Modifier.padding(top = 4.dp),
             )
             OutlinedButton(
                 onClick = {
