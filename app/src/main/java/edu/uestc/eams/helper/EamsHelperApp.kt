@@ -12,6 +12,7 @@ import edu.uestc.eams.helper.data.network.ApiConstants
 import edu.uestc.eams.helper.data.network.InMemoryCookieJar
 import edu.uestc.eams.helper.data.repository.UestcRepository
 import edu.uestc.eams.helper.data.session.SessionCookieStorage
+import edu.uestc.eams.helper.data.prefs.ThemePreferences
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
 import edu.uestc.eams.helper.worker.TimetableSyncWorker
 import java.util.concurrent.TimeUnit
@@ -28,6 +29,7 @@ class EamsHelperApp : Application() {
     val casRepository by lazy { CasLoginRepository(okHttpClient, cookieJar) }
 
     val academicCache by lazy { AcademicCache(this) }
+    val themePreferences by lazy { ThemePreferences(this) }
 
     val uestcRepository by lazy {
         UestcRepository(

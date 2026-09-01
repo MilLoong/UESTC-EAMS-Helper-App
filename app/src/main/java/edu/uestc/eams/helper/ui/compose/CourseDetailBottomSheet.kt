@@ -43,6 +43,9 @@ fun CourseDetailBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        shape = MaterialTheme.shapes.large,
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
     ) {
         Column(
             Modifier
@@ -57,22 +60,22 @@ fun CourseDetailBottomSheet(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             CourseDetailRow(
                 icon = Icons.Default.CalendarMonth,
-                tint = Color(0xFFE8A84A),
+                tint = MaterialTheme.colorScheme.primary,
                 text = WeekSpecDisplay.formatForUi(course.weeks),
             )
             CourseDetailRow(
                 icon = Icons.Default.Schedule,
-                tint = Color(0xFFF06292),
+                tint = MaterialTheme.colorScheme.primary,
                 text = buildPeriodDetailLine(course),
             )
             val teacher = course.teacher.trim()
             if (teacher.isNotEmpty()) {
                 CourseDetailRow(
                     icon = Icons.Default.Person,
-                    tint = Color(0xFF5B8DEF),
+                    tint = MaterialTheme.colorScheme.primary,
                     text = teacher,
                 )
             }
@@ -80,7 +83,7 @@ fun CourseDetailBottomSheet(
             if (room.isNotEmpty()) {
                 CourseDetailRow(
                     icon = Icons.Default.LocationOn,
-                    tint = Color(0xFF6BCB9A),
+                    tint = MaterialTheme.colorScheme.primary,
                     text = if (room.startsWith("@")) room else "@$room",
                 )
             }

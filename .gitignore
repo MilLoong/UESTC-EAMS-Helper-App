@@ -1,22 +1,32 @@
+# Android Studio / IntelliJ IDEA
+.idea/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-# Gradle / Android：`intermediates` 等在各自的 `**/build/` 下，全部为生成内容，勿提交。
+
+# Gradle and Kotlin generated files
+.gradle/
+.kotlin/
 **/build/
-/captures
-.externalNativeBuild
-.cxx
+
+# Android generated files
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Machine-local configuration
 local.properties
 keystore.properties
-signing/*.jks
-signing/*.keystore
+.local/
+.ddoge_ref/
+
+# Signing keys and local release secrets
+*.jks
+*.keystore
 signing/github-secrets-local.txt
-/.ddoge_ref/
-.kotlin/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+
+# Local reference clones; the workspace root is the actual app repository.
+/UESTC-EAMS-Helper-App/
+/UESTC-EAMS-Helper-Python/

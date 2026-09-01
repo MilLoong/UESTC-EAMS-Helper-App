@@ -3,7 +3,6 @@ package edu.uestc.eams.helper.data.eamsapp
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import edu.uestc.eams.helper.data.network.ApiConstants
-import edu.uestc.eams.helper.domain.model.CurSemester
 import edu.uestc.eams.helper.domain.model.UserProfile
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -38,16 +37,12 @@ class EamsAppApi(private val client: OkHttpClient) {
         )
     }
 
-    fun fetchCurSemester(cookieHeader: String): CurSemester? {
+    fun fetchCurSemesterCode(cookieHeader: String): String? {
         val url = "${ApiConstants.EAMSAPP_ORIGIN}/api/ydzc-app/semester/getCurSemester"
         val (_, body) = get(url, cookieHeader)
         val root = BladeJson.parseApiBody(body) ?: return null
-        return BladeJson.parseCurSemester(BladeJson.unwrapRoot(root))
-            ?: BladeJson.parseCurSemester(root)
+        return BladeJson.firstSemesterCode(BladeJson.unwrapRoot(root))
     }
-
-    fun fetchCurSemesterCode(cookieHeader: String): String? =
-        fetchCurSemester(cookieHeader)?.code
 
     fun fetchCurWeek(cookieHeader: String, semesterCode: String): Int? {
         val q = URLEncoder.encode(semesterCode, Charsets.UTF_8.name())

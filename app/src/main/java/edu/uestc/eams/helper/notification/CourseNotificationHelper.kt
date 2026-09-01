@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import edu.uestc.eams.helper.MainActivity
 import edu.uestc.eams.helper.R
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
@@ -128,6 +129,7 @@ object CourseNotificationHelper {
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setColor(ContextCompat.getColor(context, R.color.app_primary))
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .build()
 

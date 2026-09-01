@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import edu.uestc.eams.helper.ui.compose.MainScreen
 import edu.uestc.eams.helper.ui.theme.UestcHelperTheme
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
@@ -23,7 +25,9 @@ class MainActivity : ComponentActivity() {
         intent?.getIntExtra(CourseNotificationWorker.EXTRA_OPEN_TAB, -1)?.takeIf { it >= 0 }
 
         setContent {
-            UestcHelperTheme {
+            val app = application as EamsHelperApp
+            val themeKey by app.themePreferences.theme.collectAsState()
+            UestcHelperTheme(themeKey = themeKey) {
                 MainScreen()
             }
         }

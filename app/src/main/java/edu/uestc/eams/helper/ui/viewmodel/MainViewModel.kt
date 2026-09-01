@@ -8,7 +8,10 @@ import androidx.lifecycle.viewModelScope
 import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.EamsHelperApp
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
+import edu.uestc.eams.helper.data.prefs.TimetableDisplayPreferences
+import edu.uestc.eams.helper.data.prefs.TimetableLayoutSettings
 import edu.uestc.eams.helper.data.prefs.GradeSelectionPreferences
+import edu.uestc.eams.helper.data.prefs.ThemePreferences
 import edu.uestc.eams.helper.data.update.AppUpdateChecker
 import edu.uestc.eams.helper.data.update.UpdateReminderStorage
 import edu.uestc.eams.helper.data.auth.CasLoginRepository
@@ -22,6 +25,7 @@ import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
 import edu.uestc.eams.helper.data.network.EamsFetchException
+import edu.uestc.eams.helper.data.parser.TeachingWeekEstimator
 import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
 import java.time.DayOfWeek
@@ -38,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 
 data class MainUiState(
@@ -49,6 +54,10 @@ data class MainUiState(
     val timetableMeta: TimetableMeta? = null,
     val exams: List<ExamItem> = emptyList(),
     val grades: List<GradeItem> = emptyList(),
+    val semesterOptions: List<String> = emptyList(),
+    val currentSemesterCode: String? = null,
+    val scheduleSemester: String? = null,
+    val examSemester: String? = null,
     val showLogin: Boolean = false,
     val loginDeferred: Boolean = false,
     val loginStatus: String? = null,
@@ -60,8 +69,8 @@ data class MainUiState(
     val gradeKeysForAverage: Set<String> = emptySet(),
     val gradeKeysForGpa: Set<String> = emptySet(),
     val wakeUpImportPrompt: WakeUpImportPrompt? = null,
-    /** 顶栏切周时让 Pager 滚到该周；消费后清空。 */
-    val timetablePagerScrollWeek: Int? = null,
+    val timetableLayout: TimetableLayoutSettings = TimetableLayoutSettings(),
+    val themeName: String = ThemePreferences.DEFAULT_THEME,
 )
 
 /** 树维 HTML 已解析，待用户确认第 1 教学周起始日。 */
@@ -87,10 +96,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val updateChecker = AppUpdateChecker()
     private val updateStorage = UpdateReminderStorage(application)
     private val reminderPrefs = CourseReminderPreferences(application)
+    private val timetableDisplayPrefs = TimetableDisplayPreferences(application)
     private val gradeSelectionPrefs = GradeSelectionPreferences(application)
     private val _ui =
         MutableStateFlow(
-            MainUiState(reminderLeadMinutes = CourseReminderPreferences(application).leadMinutes),
+            MainUiState(
+                reminderLeadMinutes = CourseReminderPreferences(application).leadMinutes,
+                timetableLayout = TimetableDisplayPreferences(application).load(),
+                themeName = app.themePreferences.theme.value,
+            ),
         )
     val ui: StateFlow<MainUiState> = _ui.asStateFlow()
 
@@ -101,21 +115,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         reloadFromCache()
-        repo.alignTimetableDisplayToToday()?.let { aligned ->
-            reloadFromCache()
-            _ui.update { it.copy(timetablePagerScrollWeek = aligned.displayWeek) }
-            if (repo.hasLocalSession() && !repo.isOfflineImported()) {
-                loadTimetableWeek(aligned.displayWeek)
-            }
-        }
         viewModelScope.launch {
             val hasSession = repo.hasLocalSession()
-            val needLogin = !hasSession && _ui.value.courses.isEmpty() && !_ui.value.loginDeferred
             _ui.update { current ->
                 current.copy(
                     loggedIn = hasSession,
                     userProfile = if (hasSession) repo.cachedUserProfile() else null,
-                    showLogin = needLogin,
+                    showLogin = false,
                     contentLoading = false,
                 )
             }
@@ -125,6 +131,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _ui.update { it.copy(userProfile = p) }
                     }
                 }
+            }
+        }
+        viewModelScope.launch {
+            val cur = repo.fetchCurrentSemesterCode()
+            val priorMetaSemester = repo.cachedTimetableMeta()?.semesterCode
+            _ui.update { it.copy(currentSemesterCode = cur) }
+            val semesterChanged =
+                cur != null &&
+                    cur != priorMetaSemester &&
+                    !repo.isOfflineImported()
+            if (semesterChanged && _ui.value.scheduleSemester.isNullOrBlank()) {
+                refreshCurrentSemesterData()
+            } else {
+                reloadFromCache()
             }
         }
         viewModelScope.launch { checkAppUpdate(force = false) }
@@ -214,11 +234,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopSmsResendCooldown()
         _ui.update {
             it.copy(
-                // 提交期间保持短信阶段，避免主按钮切回「获取验证码」并误触再次 login()
                 awaitingSms = true,
-                smsResendSecondsLeft = 0,
                 loginStatus = "正在提交验证码…",
                 contentLoading = true,
+            )
+        }
+    }
+
+    /** 验证码页点返回：取消等待中的二次认证，回到学号密码页，不结束整个登录框。 */
+    fun cancelSmsStep() {
+        cancelPendingSms()
+        stopSmsResendCooldown()
+        _ui.update {
+            it.copy(
+                awaitingSms = false,
+                smsResendSecondsLeft = 0,
+                contentLoading = false,
+                loginStatus = null,
             )
         }
     }
@@ -274,6 +306,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     refreshAllDataAfterLogin()
                 },
                 onFailure = { e ->
+                    if (isLoginCancelled(e)) {
+                        _ui.update {
+                            it.copy(
+                                contentLoading = false,
+                                awaitingSms = false,
+                                smsResendSecondsLeft = 0,
+                            )
+                        }
+                        return@fold
+                    }
                     val msg = LoginUserMessages.fromThrowable(e)
                     _ui.update {
                         it.copy(
@@ -294,7 +336,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun shiftTimetableWeek(delta: Int) {
         val base = _ui.value.timetableMeta?.displayWeek ?: 1
         val target = (base + delta).coerceAtLeast(1)
-        _ui.update { it.copy(timetablePagerScrollWeek = target) }
         selectTimetableWeek(target)
     }
 
@@ -317,18 +358,145 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun goCurrentTimetableWeek() {
         viewModelScope.launch {
+            _ui.update { it.copy(scheduleSemester = null) }
             val synced = repo.syncCurrentTeachingWeek()
             reloadFromCache()
             val meta = synced ?: _ui.value.timetableMeta ?: return@launch
             val current = meta.teachingWeekOn(LocalDate.now())
-            _ui.update { it.copy(timetablePagerScrollWeek = current) }
             loadTimetableWeek(current, forceNetwork = synced != null)
         }
     }
 
-    fun consumeTimetablePagerScroll() {
-        if (_ui.value.timetablePagerScrollWeek != null) {
-            _ui.update { it.copy(timetablePagerScrollWeek = null) }
+    /** 仅切换课表所查看的学期；[code] 为 null 表示回到当前学期（不影响考试页）。 */
+    fun selectScheduleSemester(code: String?) {
+        val current = _ui.value.currentSemesterCode
+        val isCurrent = code == null || (current != null && code == current)
+        if (isCurrent) {
+            _ui.update {
+                it.copy(
+                    scheduleSemester = null,
+                    courses = emptyList(),
+                    contentLoading = true,
+                )
+            }
+            if (repo.isOfflineImported()) {
+                reloadFromCache()
+                return
+            }
+            goCurrentTimetableWeek()
+            return
+        }
+        val target = code
+        if (target.isNullOrBlank()) return
+        _ui.update {
+            it.copy(
+                scheduleSemester = target,
+                courses = emptyList(),
+                contentLoading = true,
+            )
+        }
+        loadTimetableWeek(1, forceNetwork = true)
+    }
+
+    /** 仅切换考试所查看的学期；[code] 为 null 表示回到当前学期（不影响课表页）。 */
+    fun selectExamSemester(code: String?) {
+        val current = _ui.value.currentSemesterCode
+        val isCurrent = code == null || (current != null && code == current)
+        if (isCurrent) {
+            _ui.update {
+                it.copy(
+                    examSemester = null,
+                    exams = emptyList(),
+                    contentLoading = true,
+                )
+            }
+            refreshCurrentExams()
+            return
+        }
+        val target = code
+        if (target.isNullOrBlank()) return
+        _ui.update {
+            it.copy(
+                examSemester = target,
+                exams = emptyList(),
+                contentLoading = true,
+            )
+        }
+        refreshExamsFor(target)
+    }
+
+    private fun refreshCurrentExams() {
+        viewModelScope.launch {
+            repo.refreshExams().fold(
+                onSuccess = {
+                    _ui.update { it.copy(contentLoading = false) }
+                    reloadFromCache()
+                },
+                onFailure = { e ->
+                    _ui.update {
+                        applyDataFetchFailure(it.copy(contentLoading = false), e)
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshExamsFor(semester: String) {
+        viewModelScope.launch {
+            repo.refreshExams(semester).fold(
+                onSuccess = {
+                    _ui.update { it.copy(contentLoading = false) }
+                    reloadFromCache()
+                },
+                onFailure = { e ->
+                    _ui.update {
+                        applyDataFetchFailure(it.copy(contentLoading = false), e)
+                    }
+                },
+            )
+        }
+    }
+
+    /** 检测到新学期时，拉取最新当前学期的课表与考试，避免显示旧学期数据。 */
+    private fun refreshCurrentSemesterData() {
+        viewModelScope.launch {
+            _ui.update {
+                it.copy(
+                    scheduleSemester = null,
+                    examSemester = null,
+                    courses = emptyList(),
+                    exams = emptyList(),
+                    contentLoading = true,
+                )
+            }
+            val cur = _ui.value.currentSemesterCode
+            repo.refreshTimetable(forceNetwork = true, semesterCode = cur).fold(
+                onSuccess = {
+                    reloadFromCache()
+                    _ui.update { it.copy(contentLoading = false) }
+                },
+                onFailure = { e ->
+                    _ui.update {
+                        applyDataFetchFailure(it.copy(contentLoading = false), e)
+                    }
+                },
+            )
+            repo.refreshExams().fold(
+                onSuccess = { reloadFromCache() },
+                onFailure = { e ->
+                    _ui.update {
+                        applyDataFetchFailure(it.copy(contentLoading = false), e)
+                    }
+                },
+            )
+        }
+    }
+
+    fun applyWeekOneMonday(selectedDay: LocalDate) {
+        val updated = repo.applyWeekOneMonday(selectedDay)
+        reloadFromCache()
+        _ui.update {
+            it.copy(message = "已将第 1 教学周对齐到 ${updated.weekOneMonday}")
         }
     }
 
@@ -344,7 +512,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     prefetchAdjacentTimetableWeeks(w, generation)
                     return@launch
                 }
-                repo.refreshTimetable(w, forceNetwork = forceNetwork).fold(
+                val sem = _ui.value.scheduleSemester?.takeIf { it.isNotBlank() }
+                repo.refreshTimetable(w, forceNetwork = forceNetwork, semesterCode = sem).fold(
                     onSuccess = {
                         if (generation != timetableWeekLoadGeneration) return@fold
                         reloadFromCache()
@@ -361,13 +530,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun prefetchAdjacentTimetableWeeks(centerWeek: Int, generation: Int) {
         if (repo.isOfflineImported()) return
         viewModelScope.launch {
-            val semester = repo.cachedTimetableMeta()?.semesterCode ?: return@launch
+            val semester =
+                _ui.value.scheduleSemester?.takeIf { it.isNotBlank() }
+                    ?: repo.cachedTimetableMeta()?.semesterCode
+                    ?: return@launch
             for (delta in intArrayOf(-1, 1)) {
                 if (generation != timetableWeekLoadGeneration) return@launch
                 val w = centerWeek + delta
                 if (w < 1) continue
                 if (repo.hasCachedTimetableWeek(semester, w)) continue
-                repo.refreshTimetable(w, forceNetwork = false).getOrNull()
+                repo.refreshTimetable(w, forceNetwork = false, semesterCode = semester).getOrNull()
             }
         }
     }
@@ -378,7 +550,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _ui.update { current ->
                 current.copy(
                     loggedIn = hasSession,
-                    showLogin = !hasSession && current.courses.isEmpty() && !current.loginDeferred,
                     userProfile =
                         when {
                             !hasSession -> null
@@ -397,12 +568,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val synced = repo.syncCurrentTeachingWeek()
                 if (synced != null) {
                     reloadFromCache()
-                    if (
-                        synced.displayWeek != before?.displayWeek ||
-                        synced.currentWeek != before?.currentWeek
-                    ) {
-                        _ui.update { it.copy(timetablePagerScrollWeek = synced.displayWeek) }
-                    }
                     if (synced.displayWeek != before?.displayWeek) {
                         loadTimetableWeek(synced.displayWeek)
                     }
@@ -420,7 +585,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _ui.update {
                         it.copy(
                             loggedIn = false,
-                            message = "当前为导入课表，请用顶栏 [导入] 更新，或登录后 [刷新] 从教务拉取",
+                            message = "当前为导入课表，请在「我的」页更新文件或登录后在课表页点刷新从教务拉取",
                         )
                     }
                     return@launch
@@ -429,9 +594,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         message =
                             if (it.courses.isEmpty()) {
-                                "请先登录，或在 Web 中 [导入会话] 后点 [刷新]，或顶栏 [导入] 树维课表 HTML"
+                                "请先登录，或在「我的」页使用网页登录 / 导入课表文件"
                             } else {
-                                "暂无登录信息，点 [刷新] 将尝试使用已保存会话；失败时请重新登录或 Web 导入"
+                                "暂无登录信息，在课表页点刷新将尝试使用已保存会话；失败请到「我的」页重新登录"
                             },
                     )
                 }
@@ -441,7 +606,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _ui.update {
                 it.copy(contentLoading = true, message = null, loggedIn = true, showLogin = false)
             }
-            repo.refreshForTab(tab, displayWeek).fold(
+            val activeSem = _ui.value.scheduleSemester?.takeIf { it.isNotBlank() }
+            repo.refreshForTab(tab, displayWeek, activeSem).fold(
                 onSuccess = {
                     reloadFromCache()
                     val weekAfter = repo.cachedTimetableMeta()?.displayWeek
@@ -509,10 +675,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             is EamsFetchException.SessionInvalid ->
                 state.copy(
-                    message = msg,
-                    loggedIn = false,
-                    showLogin = true,
-                    userProfile = null,
+                    message = "登录可能已过期，当前展示本地缓存数据；如需刷新请到「我的」页点「账号登录」重新登录。",
+                    showLogin = false,
                 )
             else ->
                 state.copy(
@@ -638,7 +802,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     parsed.courses,
                     parsed.weekOneMonday,
                 )
-            val initial = parsed.weekOneMonday ?: firstClass ?: LocalDate.now()
+            val initial =
+                TeachingWeekEstimator.defaultImportWeekOneMonday(
+                    parsed.weekOneMonday,
+                    firstClass,
+                )
             _ui.update {
                 it.copy(
                     contentLoading = false,
@@ -690,6 +858,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTimetableLayout(settings: TimetableLayoutSettings) {
+        val clamped = settings.coerce()
+        timetableDisplayPrefs.save(clamped)
+        _ui.update { it.copy(timetableLayout = clamped) }
+    }
+
     fun setReminderLeadMinutes(minutes: Int) {
         val clamped =
             minutes.coerceIn(
@@ -705,6 +879,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTheme(name: String) {
+        app.themePreferences.setTheme(name)
+        _ui.update { it.copy(themeName = name) }
+    }
+
     fun previewCourseNotification() {
         val ctx = getApplication<Application>()
         val lead = _ui.value.reminderLeadMinutes
@@ -716,7 +895,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             CourseNotificationHelper.PreviewResult.NoPermission ->
                 _ui.update { it.copy(message = "未获得通知权限，请在系统设置中允许通知") }
             CourseNotificationHelper.PreviewResult.NoCourses ->
-                _ui.update { it.copy(message = "暂无课表，请先 [刷新] 后再试发通知") }
+                _ui.update { it.copy(message = "暂无课表，请先在课表页刷新后再试发通知") }
         }
     }
 
@@ -760,27 +939,112 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _ui.update { it.copy(gradeKeysForGpa = keys) }
     }
 
+    /** 仅对给定的课程 key 集合做批量勾选/取消（用于「按学期全选」等局部操作）。 */
+    fun setGradeKeysForAverage(keys: Collection<String>, selected: Boolean) {
+        val next =
+            if (selected) {
+                _ui.value.gradeKeysForAverage + keys
+            } else {
+                _ui.value.gradeKeysForAverage - keys.toSet()
+            }
+        gradeSelectionPrefs.saveAverageKeys(next)
+        _ui.update { it.copy(gradeKeysForAverage = next) }
+    }
+
+    fun setGradeKeysForGpa(keys: Collection<String>, selected: Boolean) {
+        val next =
+            if (selected) {
+                _ui.value.gradeKeysForGpa + keys
+            } else {
+                _ui.value.gradeKeysForGpa - keys.toSet()
+            }
+        gradeSelectionPrefs.saveGpaKeys(next)
+        _ui.update { it.copy(gradeKeysForGpa = next) }
+    }
+
     private fun syncGradeSelections(grades: List<GradeItem>): GradeSelectionPreferences.GradeSelectionState {
         val keys = grades.map { GradeStatsCalculator.stableKey(it) }.toSet()
         return gradeSelectionPrefs.syncWithCurrentGrades(keys, grades)
     }
 
     private fun reloadFromCache() {
-        val courses = repo.cachedCourses()
         val meta = repo.cachedTimetableMeta()
         val grades = repo.cachedGrades()
         val gradeSelection = syncGradeSelections(grades)
+        val current = _ui.value.currentSemesterCode
+        val scheduleChoice = _ui.value.scheduleSemester
+        val examChoice = _ui.value.examSemester
+        val scheduleDisplay =
+            when {
+                !scheduleChoice.isNullOrBlank() -> scheduleChoice
+                !current.isNullOrBlank() -> current
+                else -> meta?.semesterCode.orEmpty()
+            }
+        val examDisplay =
+            when {
+                !examChoice.isNullOrBlank() -> examChoice
+                !current.isNullOrBlank() -> current
+                else -> meta?.semesterCode.orEmpty()
+            }
+        val courses =
+            if (scheduleDisplay.isBlank()) {
+                emptyList()
+            } else {
+                repo.cachedCourses(scheduleDisplay)
+            }
+        val exams =
+            if (examDisplay.isBlank()) {
+                emptyList()
+            } else {
+                repo.cachedExams(examDisplay)
+            }
+        val options =
+            if (repo.isOfflineImported()) {
+                emptyList()
+            } else {
+                semesterOptionsFrom(grades, current)
+            }
         _ui.update {
             it.copy(
                 courses = courses,
                 timetableMeta = meta,
-                exams = repo.cachedExams(),
+                exams = exams,
                 grades = grades,
                 userProfile = repo.cachedUserProfile(),
                 gradeKeysForAverage = gradeSelection.averageKeys,
                 gradeKeysForGpa = gradeSelection.gpaKeys,
+                currentSemesterCode = current,
+                scheduleSemester = _ui.value.scheduleSemester,
+                examSemester = _ui.value.examSemester,
+                semesterOptions = options,
                 contentLoading = false,
             )
         }
+    }
+
+    private fun semesterOptionsFrom(
+        grades: List<GradeItem>,
+        current: String?,
+    ): List<String> {
+        val fromGrades =
+            grades.map { it.semester }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sortedDescending()
+        val currentFirst = listOfNotNull(current)
+        val order =
+            (currentFirst + fromGrades)
+                .distinct()
+                .sortedBy { if (it == current) 0 else 1 }
+        return order
+    }
+
+    private fun isLoginCancelled(error: Throwable): Boolean {
+        var cur: Throwable? = error
+        while (cur != null) {
+            if (cur is CancellationException) return true
+            cur = cur.cause
+        }
+        return false
     }
 }

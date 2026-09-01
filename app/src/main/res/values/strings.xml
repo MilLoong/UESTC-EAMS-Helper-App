@@ -1,8 +1,12 @@
 <resources>
     <string name="app_name">成电教务助手</string>
 
-    <string name="login_freeze_warning">请勿频繁登录：统一认证多次登录可能导致账号被冻结。已有网页会话时优先用顶栏 [Web] [导入会话]，避免重复登录。</string>
+    <string name="login_freeze_warning">请勿频繁登录：统一认证多次登录可能导致账号被冻结。已有网页会话时优先用「我的」页 [网页登录] 与 [导入会话]，避免重复登录。</string>
     <string name="login_browser_fallback_hint">若 App 内登录不成功，可点 Web 打开网页登录，再 [导入会话] 后点 [刷新]。</string>
+    <string name="login_credentials_title">学号密码登录</string>
+    <string name="login_credentials_subtitle">只需填写学号和密码。若学校要求短信二次认证，下一步才会出现验证码页。</string>
+    <string name="login_sms_title">短信验证码</string>
+    <string name="login_sms_subtitle">学校已要求二次认证。请填写手机收到的验证码，无需再输入学号和密码。</string>
 
     <string name="browser_activity_title">Web</string>
     <string name="web_import_guide_title">导入会话前请先登录</string>
@@ -29,4 +33,14 @@
     <string name="wakeup_import_preset_first_class">第 1 周首日有课 [%1$s]</string>
     <string name="wakeup_import_confirm">导入</string>
     <string name="wakeup_import_cancel">取消</string>
+
+    <string name="adjust_week_one_title">对齐第 1 教学周</string>
+    <string name="adjust_week_one_message">选择本学期开学那一周里的任意一天。课表日期会按该周周一对齐；可先看下方预览再保存。</string>
+    <string name="adjust_week_one_preview_monday">第 1 周周一：%1$s</string>
+    <string name="adjust_week_one_preview_week">第 %1$d 周  %2$s – %3$s</string>
+    <string name="adjust_week_one_preview_before">今天还没开学，课表仍从第 1 周起翻页，日期按开学周计算。</string>
+    <string name="adjust_week_one_preview_today">按此对齐时，今天落在第 %1$d 周</string>
+    <string name="adjust_week_one_confirm">保存对齐</string>
+    <string name="adjust_week_one_cancel">取消</string>
+    <string name="adjust_week_one_action">对齐日期</string>
 </resources>

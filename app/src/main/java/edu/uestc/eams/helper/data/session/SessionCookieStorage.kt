@@ -21,13 +21,22 @@ class SessionCookieStorage(
     )
 
     fun persistFromJar(jar: InMemoryCookieJar) {
-        prefs
-            .edit()
-            .putString(KEY_JSON, storedListToJson(CookieExporter.fromOkHttp(jar.snapshot())))
-            .commit()
+        val stored = CookieExporter.fromOkHttp(jar.snapshot())
+        // 不要用空快照覆盖已有会话：避免偶发的登录探测失败把有效 Cookie 冲掉。
+        if (stored.isEmpty()) return
+        val json = storedListToJson(stored)
+        prefs.edit().putString(KEY_JSON, json).commit()
+        DebugSessionSidecar.save(json)
     }
 
     fun restoreInto(jar: InMemoryCookieJar) {
+        if (loadStoredList().isEmpty()) {
+            DebugSessionSidecar.load()?.let { json ->
+                prefs.edit().putString(KEY_JSON, json).commit()
+            }
+        } else {
+            prefs.getString(KEY_JSON, null)?.let(DebugSessionSidecar::save)
+        }
         val list = loadStoredList()
         if (list.isEmpty()) return
         jar.clearAll()

@@ -4,65 +4,59 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.CourseWebActivity
-import edu.uestc.eams.helper.R
 import edu.uestc.eams.helper.data.network.ApiConstants
 import edu.uestc.eams.helper.ui.viewmodel.MainViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel()) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -98,75 +92,13 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                    )
-                },
-                actions = {
-                    TextButton(onClick = { viewModel.showLogin() }) {
-                        Text("登录")
-                    }
-                    IconButton(
-                        onClick = { viewModel.refreshAll() },
-                        enabled = !state.contentLoading,
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
-                    }
-                    TextButton(
-                        onClick = {
-                            importLauncher.launch(
-                                arrayOf("text/html", "text/plain", "application/octet-stream"),
-                            )
-                        },
-                    ) {
-                        Text("导入")
-                    }
-                    TextButton(
-                        onClick = {
-                            CourseWebActivity.start(
-                                context,
-                                ApiConstants.casLoginUrlWithService(),
-                            )
-                        },
-                    ) {
-                        Text("Web")
-                    }
-                },
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = state.selectedTab == 0,
-                    onClick = { viewModel.selectTab(0) },
-                    icon = { Icon(Icons.Default.TableChart, null) },
-                    label = { Text("课表") },
-                )
-                NavigationBarItem(
-                    selected = state.selectedTab == 1,
-                    onClick = { viewModel.selectTab(1) },
-                    icon = { Icon(Icons.Default.DateRange, null) },
-                    label = { Text("考试") },
-                )
-                NavigationBarItem(
-                    selected = state.selectedTab == 2,
-                    onClick = { viewModel.selectTab(2) },
-                    icon = { Icon(Icons.Default.School, null) },
-                    label = { Text("成绩") },
-                )
-                NavigationBarItem(
-                    selected = state.selectedTab == 3,
-                    onClick = { viewModel.selectTab(3) },
-                    icon = { Icon(Icons.Default.Person, null) },
-                    label = { Text("我的") },
-                )
-            }
+            AppNavigationBar(
+                selectedTab = state.selectedTab,
+                onSelect = { viewModel.selectTab(it) },
+            )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -175,15 +107,31 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                     ScheduleTab(
                         courses = state.courses,
                         timetableMeta = state.timetableMeta,
-                        pagerScrollWeek = state.timetablePagerScrollWeek,
+                        layout = state.timetableLayout,
+                        contentLoading = state.contentLoading,
+                        semesterOptions = state.semesterOptions,
+                        activeSemesterCode = state.scheduleSemester,
+                        currentSemesterCode = state.currentSemesterCode,
+                        isCurrentSemester =
+                            state.scheduleSemester == null ||
+                                state.scheduleSemester == state.currentSemesterCode,
+                        onSemesterSelect = { viewModel.selectScheduleSemester(it) },
                         modifier = Modifier.fillMaxSize(),
                         onPrevWeek = { viewModel.shiftTimetableWeek(-1) },
                         onNextWeek = { viewModel.shiftTimetableWeek(1) },
-                        onWeekSelected = { viewModel.selectTimetableWeek(it) },
                         onGoCurrentWeek = { viewModel.goCurrentTimetableWeek() },
-                        onPagerScrollConsumed = { viewModel.consumeTimetablePagerScroll() },
+                        onSelectWeek = { viewModel.selectTimetableWeek(it) },
+                        onRefresh = { viewModel.refreshAll() },
+                        onLayoutChange = { viewModel.setTimetableLayout(it) },
                     )
-                1 -> ExamTab(state.exams, Modifier.fillMaxSize())
+                1 ->
+                    ExamTab(
+                        exams = state.exams,
+                        modifier = Modifier.fillMaxSize(),
+                        semesterOptions = state.semesterOptions,
+                        activeSemesterCode = state.examSemester,
+                        onSemesterSelect = { viewModel.selectExamSemester(it) },
+                    )
                 2 ->
                     GradesTab(
                         grades = state.grades,
@@ -191,8 +139,12 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         gpaKeys = state.gradeKeysForGpa,
                         onToggleAverage = { viewModel.toggleGradeForAverage(it) },
                         onToggleGpa = { viewModel.toggleGradeForGpa(it) },
-                        onSelectAllAverage = { viewModel.setAllGradesForAverage(it) },
-                        onSelectAllGpa = { viewModel.setAllGradesForGpa(it) },
+                        onSelectAverageScope = { keys, selected ->
+                            viewModel.setGradeKeysForAverage(keys, selected)
+                        },
+                        onSelectGpaScope = { keys, selected ->
+                            viewModel.setGradeKeysForGpa(keys, selected)
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 else ->
@@ -201,8 +153,26 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         profile = state.userProfile,
                         appVersion = BuildConfig.VERSION_NAME,
                         reminderLeadMinutes = state.reminderLeadMinutes,
+                        weekOneMonday = state.timetableMeta?.weekOneMonday,
+                        weekOneLocked = state.timetableMeta?.weekOneLocked == true,
                         onReminderLeadMinutesChange = { viewModel.setReminderLeadMinutes(it) },
+                        onAdjustWeekOne = { viewModel.applyWeekOneMonday(it) },
                         onLogin = { viewModel.showLogin() },
+                        onWebLogin = {
+                            CourseWebActivity.start(
+                                context,
+                                ApiConstants.casLoginUrlWithService(),
+                            )
+                        },
+                        onImportTimetable = {
+                            importLauncher.launch(
+                                arrayOf("text/html", "text/plain", "application/octet-stream"),
+                            )
+                        },
+                        timetableLayout = state.timetableLayout,
+                        onTimetableLayoutChange = { viewModel.setTimetableLayout(it) },
+                        themeName = state.themeName,
+                        onThemeChange = { viewModel.setTheme(it) },
                         onCheckUpdate = { viewModel.checkAppUpdate(force = true) },
                         onDebugNotify = { viewModel.previewCourseNotification() },
                         modifier = Modifier.fillMaxSize(),
@@ -226,6 +196,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     state.updatePrompt?.let { update ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissUpdatePrompt() },
+            shape = MaterialTheme.shapes.large,
             title = { Text("发现新版本 ${update.versionLabel}") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -267,12 +238,13 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
         )
     }
 
-    if (state.showLogin || (!state.loggedIn && state.courses.isEmpty() && !state.loginDeferred)) {
-        LoginDialog(
+    if (state.showLogin) {
+        CasLoginFlow(
             onDismiss = { viewModel.dismissLogin() },
             onLogin = { u, p -> viewModel.login(u, p) },
             onSubmitSms = { viewModel.submitSmsCode(it) },
             onResendSms = { viewModel.resendSmsCode() },
+            onBackFromSms = { viewModel.cancelSmsStep() },
             loading = state.contentLoading,
             loginStatus = state.loginStatus,
             awaitingSms = state.awaitingSms,
@@ -281,148 +253,88 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LoginDialog(
-    onDismiss: () -> Unit,
-    onLogin: (String, String) -> Unit,
-    onSubmitSms: (String) -> Unit,
-    onResendSms: () -> Unit,
-    loading: Boolean,
-    loginStatus: String?,
-    awaitingSms: Boolean,
-    smsResendSecondsLeft: Int,
-) {
-    val context = LocalContext.current
-    var user by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
-    var sms by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
+private data class NavItem(
+    val index: Int,
+    val icon: ImageVector,
+    val label: String,
+)
 
-    AlertDialog(
-        onDismissRequest = {
-            if (!loading) {
-                cancelLoginAutofill(context)
-                onDismiss()
-            }
-        },
-        title = { Text("统一身份认证登录") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    stringResource(R.string.login_freeze_warning),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                if (!loginStatus.isNullOrBlank()) {
-                    Text(
-                        loginStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color =
-                            when {
-                                loginStatus.contains("正在") ||
-                                    loginStatus.contains("请填写") ||
-                                    loginStatus.contains("验证码已") -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.error
-                            },
-                    )
-                }
-                Text(
-                    stringResource(R.string.login_browser_fallback_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = { Text("学号") },
-                    singleLine = true,
-                    enabled = !loading && !awaitingSms,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().autofillUsername(),
-                )
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    label = { Text("密码") },
-                    singleLine = true,
-                    enabled = !loading && !awaitingSms,
-                    visualTransformation =
-                        if (passwordVisible) {
-                            VisualTransformation.None
+@Composable
+private fun AppNavigationBar(
+    selectedTab: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val items =
+        listOf(
+            NavItem(0, Icons.Default.TableChart, "课表"),
+            NavItem(1, Icons.Default.DateRange, "考试"),
+            NavItem(2, Icons.Default.School, "成绩"),
+            NavItem(3, Icons.Default.Person, "我的"),
+        )
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            ) {
+                items.forEach { item ->
+                    val selected = selectedTab == item.index
+                    val fg =
+                        if (selected) {
+                            MaterialTheme.colorScheme.primary
                         } else {
-                            PasswordVisualTransformation()
-                        },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource =
+                                        remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { onSelect(item.index) },
+                                ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Column(
+                            Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                )
+                                .padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
                             Icon(
-                                if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                                item.icon,
+                                contentDescription = item.label,
+                                tint = fg,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Text(
+                                item.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = fg,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().autofillPassword(),
-                )
-                OutlinedTextField(
-                    value = sms,
-                    onValueChange = { sms = it },
-                    label = { Text("短信验证码") },
-                    singleLine = true,
-                    enabled = !loading && awaitingSms,
-                    modifier = Modifier.fillMaxWidth().autofillSmsOtp(),
-                )
-                if (awaitingSms) {
-                    TextButton(
-                        onClick = onResendSms,
-                        enabled = !loading && smsResendSecondsLeft == 0,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            if (smsResendSecondsLeft > 0) {
-                                "重新发送验证码 (${smsResendSecondsLeft}s)"
-                            } else {
-                                "重新发送验证码"
-                            },
-                        )
                     }
                 }
             }
-        },
-        confirmButton = {
-            // 同一 TextButton，避免 awaitingSms 切换时替换按钮导致误触再次 login()
-            TextButton(
-                onClick = {
-                    if (awaitingSms) {
-                        onSubmitSms(sms)
-                    } else {
-                        onLogin(user.trim(), pass)
-                    }
-                },
-                enabled =
-                    if (awaitingSms) {
-                        !loading && sms.isNotBlank()
-                    } else {
-                        !loading && user.isNotBlank() && pass.isNotBlank()
-                    },
-            ) {
-                Text(
-                    when {
-                        loading && awaitingSms -> "登录中…"
-                        loading -> "获取中…"
-                        awaitingSms -> "登录"
-                        else -> "获取验证码"
-                    },
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = {
-                    cancelLoginAutofill(context)
-                    onDismiss()
-                },
-                enabled = !loading,
-            ) { Text("稍后") }
-        },
-    )
+        }
+    }
 }

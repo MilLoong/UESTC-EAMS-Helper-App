@@ -35,78 +35,34 @@ class AcademicCache(context: Context) {
         } ?: emptyList()
 
     /**
-     * 课表 UI 用课程列表：树维导入为整表；在线模式为[已拉取过的各教学周]合并，
-     * 与树维一样供 Pager 按周过滤，而不是只保留「当前周」一份。
+     * 课表 UI 用课程列表：树维导入为整表；在线模式为[该学期已拉取过的各教学周]合并。
+     * 周课表按「学期|周」存储，多个学期可并存，切换学期不清空其它学期。
      */
-    fun loadTimetableCoursesForUi(): List<UestcCourse> {
+    fun loadTimetableCoursesForUi(semesterCode: String): List<UestcCourse> {
         if (isOfflineImported()) return loadCourses()
-        return rebuildMergedWeekCourses()
+        if (semesterCode.isBlank()) return emptyList()
+        return rebuildMergedWeekCourses(semesterCode)
     }
 
     fun hasWeekCourses(semesterCode: String, week: Int): Boolean =
         loadWeekCourses(semesterCode, week) != null
 
-    fun loadWeekCourses(semesterCode: String, week: Int): List<UestcCourse>? {
-        ensureWeekCacheSemester(semesterCode)
-        return loadWeekCourseMap()[weekKey(week)]
-    }
+    fun loadWeekCourses(semesterCode: String, week: Int): List<UestcCourse>? =
+        loadWeekCourseMap()[weekCacheKey(semesterCode, week)]
 
     fun saveWeekCourses(semesterCode: String, week: Int, courses: List<UestcCourse>) {
-        ensureWeekCacheSemester(semesterCode)
         val map = loadWeekCourseMap().toMutableMap()
-        // 保留接口原始周次（如 1-16），供卡片/详情展示起止周
-        map[weekKey(week)] = courses
+        // 接口常带 1-16 等全学期周次，合并后按周过滤会致相邻周显示相同；按请求周强制打标
+        map[weekCacheKey(semesterCode, week)] = courses.map { it.copy(weeks = week.toString()) }
         prefs.edit().putString(KEY_WEEK_COURSES, gson.toJson(map)).apply()
         markWeekTimetableSyncedToday(semesterCode, week)
-        if (!isOfflineImported()) {
-            saveCourses(rebuildMergedWeekCourses())
-        }
     }
 
-    /**
-     * 合并各周缓存：同一课次只留一条，避免保留全学期周次后按周过滤时相邻周重复出块。
-     * 冲突时优先保留信息更完整的 weeks（含区间或更长）。
-     */
-    private fun rebuildMergedWeekCourses(): List<UestcCourse> {
-        val byKey = LinkedHashMap<String, UestcCourse>()
-        val weeks =
-            loadWeekCourseMap().entries.sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
-        for ((_, list) in weeks) {
-            for (course in list) {
-                val key = courseSlotKey(course)
-                val existing = byKey[key]
-                byKey[key] =
-                    if (existing == null) {
-                        course
-                    } else {
-                        preferRicherWeeks(existing, course)
-                    }
-            }
-        }
-        return byKey.values.toList()
-    }
-
-    private fun courseSlotKey(c: UestcCourse): String =
-        listOf(
-            c.weekday.toString(),
-            c.courseName.trim(),
-            c.period.toString(),
-            c.endPeriod.toString(),
-            c.room.trim(),
-            c.teacher.trim(),
-            c.lessonNo.trim().ifEmpty { c.courseId.trim() },
-        ).joinToString("|")
-
-    private fun preferRicherWeeks(a: UestcCourse, b: UestcCourse): UestcCourse =
-        if (weeksRichness(b.weeks) > weeksRichness(a.weeks)) b else a
-
-    private fun weeksRichness(spec: String): Int {
-        val s = spec.trim()
-        if (s.isEmpty()) return 0
-        var score = s.length
-        if (s.contains('-') || s.contains(',')) score += 100
-        return score
-    }
+    private fun rebuildMergedWeekCourses(semesterCode: String): List<UestcCourse> =
+        loadWeekCourseMap()
+            .filterKeys { it.startsWith("$semesterCode|") }
+            .values
+            .flatten()
 
     /** 该教学周今天是否已同步过。 */
     fun wasWeekTimetableSyncedToday(semesterCode: String, week: Int): Boolean {
@@ -124,29 +80,31 @@ class AcademicCache(context: Context) {
 
     private fun syncKey(semesterCode: String, week: Int): String = "$semesterCode|$week"
 
+    private fun weekCacheKey(semesterCode: String, week: Int): String = "$semesterCode|$week"
+
     /**
-     * 学期代码变化时清空在线课表周缓存与合并课表，避免新学期仍显示旧数据。
-     * 树维导入学期为 [IMPORT_SEMESTER]，与教务学期互切时同样会清空。
+     * 读取周课表映射，并把旧版「仅周号」的键迁移为「学期|周」，避免升级后丢缓存。
      */
-    fun ensureWeekCacheSemester(semesterCode: String) {
-        val stored = prefs.getString(KEY_WEEK_CACHE_SEMESTER, null)
-        if (stored != semesterCode) {
-            prefs.edit()
-                .putString(KEY_WEEK_CACHE_SEMESTER, semesterCode)
-                .remove(KEY_WEEK_COURSES)
-                .remove(KEY_COURSES)
-                .remove(KEY_WEEK_SYNC_KEY)
-                .remove(KEY_WEEK_SYNC_DAY)
-                .apply()
+    private fun loadWeekCourseMap(): Map<String, List<UestcCourse>> {
+        val raw = prefs.getString(KEY_WEEK_COURSES, null) ?: return emptyMap()
+        val map: Map<String, List<UestcCourse>> =
+            gson.fromJson(raw, object : TypeToken<Map<String, List<UestcCourse>>>() {}.type)
+                ?: return emptyMap()
+        if (map.isEmpty()) return map
+        val legacySemester = prefs.getString(KEY_WEEK_CACHE_SEMESTER, null)
+        val needsMigrate = legacySemester != null && map.keys.any { !it.contains("|") }
+        if (!needsMigrate) return map
+        val migrated: LinkedHashMap<String, List<UestcCourse>> = LinkedHashMap()
+        for ((k, v) in map) {
+            val newKey = if (k.contains("|")) k else "$legacySemester|$k"
+            migrated[newKey] = v
         }
+        prefs.edit()
+            .putString(KEY_WEEK_COURSES, gson.toJson(migrated))
+            .remove(KEY_WEEK_CACHE_SEMESTER)
+            .apply()
+        return migrated
     }
-
-    private fun weekKey(week: Int): String = week.toString()
-
-    private fun loadWeekCourseMap(): Map<String, List<UestcCourse>> =
-        prefs.getString(KEY_WEEK_COURSES, null)?.let {
-            gson.fromJson(it, object : TypeToken<Map<String, List<UestcCourse>>>() {}.type)
-        } ?: emptyMap()
 
     fun saveGrades(items: List<GradeItem>) {
         prefs.edit().putString(KEY_GRADES, gson.toJson(items)).apply()
@@ -157,11 +115,31 @@ class AcademicCache(context: Context) {
             gson.fromJson(it, object : TypeToken<List<GradeItem>>() {}.type)
         } ?: emptyList()
 
-    fun saveExams(items: List<ExamItem>) {
-        prefs.edit().putString(KEY_EXAMS, gson.toJson(items)).apply()
+    /** 按学期保存考试列表；key 为学期编码。 */
+    fun saveExams(semester: String, items: List<ExamItem>) {
+        val map = examsBySemester().toMutableMap()
+        map[semester] = items
+        prefs.edit().putString(KEY_EXAMS_BY_SEMESTER, gson.toJson(map)).apply()
     }
 
-    fun loadExams(): List<ExamItem> =
+    /** 读取某学期考试；若还没有按学期存过，则回退到旧版整表缓存。 */
+    fun loadExams(semester: String): List<ExamItem> {
+        val map = examsBySemester()
+        if (map.isEmpty()) {
+            // 旧版整表缓存：视为最近一次使用的（当前）学期数据
+            return legacyFlatExams()
+        }
+        return map[semester] ?: emptyList()
+    }
+
+    fun examSemesters(): List<String> = examsBySemester().keys.sortedDescending()
+
+    private fun examsBySemester(): Map<String, List<ExamItem>> =
+        prefs.getString(KEY_EXAMS_BY_SEMESTER, null)?.let {
+            gson.fromJson(it, object : TypeToken<Map<String, List<ExamItem>>>() {}.type)
+        } ?: emptyMap()
+
+    private fun legacyFlatExams(): List<ExamItem> =
         prefs.getString(KEY_EXAMS, null)?.let {
             gson.fromJson(it, object : TypeToken<List<ExamItem>>() {}.type)
         } ?: emptyList()
@@ -195,6 +173,7 @@ class AcademicCache(context: Context) {
         private const val KEY_TIMETABLE_META = "timetable_meta"
         private const val KEY_GRADES = "grades"
         private const val KEY_EXAMS = "exams"
+        private const val KEY_EXAMS_BY_SEMESTER = "exams_by_semester"
         private const val KEY_PROFILE = "user_profile"
         private const val KEY_OFFLINE_IMPORTED = "offline_wakeup_import"
     }
