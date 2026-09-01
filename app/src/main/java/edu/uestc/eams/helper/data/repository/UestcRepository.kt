@@ -375,6 +375,7 @@ class UestcRepository(
 
     fun cachedGrades(): List<GradeItem> = cache.loadGrades()
     fun cachedExams(semester: String): List<ExamItem> = cache.loadExams(semester)
+    fun hasExamsCache(semester: String): Boolean = cache.hasExamsCache(semester)
 
     /** 联网获取当前学期编码；无会话或失败时返回 null。 */
     suspend fun fetchCurrentSemesterCode(): String? =

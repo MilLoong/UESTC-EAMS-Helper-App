@@ -132,6 +132,15 @@ class AcademicCache(context: Context) {
         return map[semester] ?: emptyList()
     }
 
+    /** 是否已缓存过该学期考试（含空列表，避免重复打接口）。 */
+    fun hasExamsCache(semester: String): Boolean {
+        if (semester.isBlank()) return false
+        val map = examsBySemester()
+        if (map.containsKey(semester)) return true
+        // 仅有旧版整表时，无法区分学期，不算可靠命中
+        return false
+    }
+
     fun examSemesters(): List<String> = examsBySemester().keys.sortedDescending()
 
     private fun examsBySemester(): Map<String, List<ExamItem>> =

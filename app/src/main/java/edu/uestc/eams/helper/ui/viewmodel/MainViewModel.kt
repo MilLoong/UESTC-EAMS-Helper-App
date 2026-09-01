@@ -408,27 +408,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectExamSemester(code: String?) {
         val current = _ui.value.currentSemesterCode
         val isCurrent = code == null || (current != null && code == current)
-        if (isCurrent) {
-            _ui.update {
-                it.copy(
-                    examSemester = null,
-                    exams = emptyList(),
-                    contentLoading = true,
-                )
+        val target =
+            if (isCurrent) {
+                current?.takeIf { it.isNotBlank() }
+                    ?: _ui.value.timetableMeta?.semesterCode?.takeIf { it.isNotBlank() }
+            } else {
+                code?.takeIf { it.isNotBlank() }
             }
-            refreshCurrentExams()
-            return
-        }
-        val target = code
         if (target.isNullOrBlank()) return
+
         _ui.update {
             it.copy(
-                examSemester = target,
-                exams = emptyList(),
-                contentLoading = true,
+                examSemester = if (isCurrent) null else target,
+                message = null,
             )
         }
-        refreshExamsFor(target)
+        // 先展示本地缓存，避免清空后重复打接口。
+        reloadFromCache()
+        if (repo.hasExamsCache(target)) {
+            _ui.update { it.copy(contentLoading = false) }
+            return
+        }
+        _ui.update { it.copy(contentLoading = true) }
+        if (isCurrent) {
+            refreshCurrentExams()
+        } else {
+            refreshExamsFor(target)
+        }
     }
 
     private fun refreshCurrentExams() {
@@ -681,7 +687,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             is EamsFetchException.SessionInvalid ->
                 state.copy(
-                    message = "登录可能已过期，当前展示本地缓存数据；如需刷新请到「我的」页点「账号登录」重新登录。",
+                    loggedIn = false,
+                    message = "登录已过期，当前展示本地缓存；请到「我的」页重新登录后再刷新。",
                     showLogin = false,
                 )
             else ->

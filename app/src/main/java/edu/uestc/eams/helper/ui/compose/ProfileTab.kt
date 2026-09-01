@@ -118,6 +118,17 @@ fun ProfileTab(
                 } ?: ProfileRow("姓名", "暂未获取到姓名")
             } else if (loggedIn) {
                 Text("已登录，点课表页刷新可同步学号与姓名。")
+            } else if (profile != null) {
+                ProfileRow("学号", profile.studentId)
+                profile.displayName?.takeIf { it.isNotBlank() }?.let { name ->
+                    ProfileRow("姓名", name)
+                }
+                Text(
+                    "登录已过期，请重新登录以继续同步。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             } else {
                 Text("未登录，登录后可在此查看学号与姓名。")
             }
@@ -131,17 +142,20 @@ fun ProfileTab(
                         .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Button(
-                    onClick = onLogin,
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        Icons.Default.AccountCircle,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    Text("账号登录")
+                // 已登录时不展示账号登录；会话过期会把 loggedIn 置 false，再显示以便重新登录。
+                if (!loggedIn) {
+                    Button(
+                        onClick = onLogin,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Text(if (profile != null) "重新登录" else "账号登录")
+                    }
                 }
                 OutlinedButton(
                     onClick = onWebLogin,
