@@ -61,6 +61,9 @@ object CourseReminderPlanner {
                 cache.loadWeekCourses(semester, w)?.let { return it }
             }
         }
-        return CourseWeekFilter.filterForWeek(cache.loadTimetableCoursesForUi(), w)
+        return CourseWeekFilter.filterForWeek(
+            cache.loadTimetableCoursesForUi(meta?.semesterCode.orEmpty()),
+            w,
+        )
     }
 }

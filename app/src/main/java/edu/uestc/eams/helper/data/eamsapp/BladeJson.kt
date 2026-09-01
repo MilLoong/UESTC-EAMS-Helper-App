@@ -3,16 +3,10 @@ package edu.uestc.eams.helper.data.eamsapp
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import edu.uestc.eams.helper.domain.model.CurSemester
 import okhttp3.Response
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /** 解析移动教务 Blade 风格 JSON 响应。 */
 object BladeJson {
-
-    private val startOnDateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-    private val startOnDate = DateTimeFormatter.ISO_LOCAL_DATE
 
     fun unwrapRoot(element: JsonElement?): JsonElement? {
         if (element == null || !element.isJsonObject) return element
@@ -74,41 +68,7 @@ object BladeJson {
         return code in listOf("401", "403", "10001")
     }
 
-    fun firstSemesterCode(element: JsonElement?, depth: Int = 0): String? =
-        parseCurSemester(element)?.code ?: firstSemesterCodeDeep(element, depth)
-
-    /** 解析 getCurSemester：学期编码、startOn / endOn、总周数等。 */
-    fun parseCurSemester(element: JsonElement?, depth: Int = 0): CurSemester? {
-        if (depth > 14 || element == null || element.isJsonNull) return null
-        when {
-            element.isJsonObject -> {
-                val o = element.asJsonObject
-                val code = semesterCodeFromObject(o)
-                if (code != null) {
-                    return CurSemester(
-                        code = code,
-                        year = stringField(o, "year", "schoolYear", "xn"),
-                        name = stringField(o, "name", "term", "xq"),
-                        startOn = dateField(o, "startOn", "start_on", "beginDate", "startDate"),
-                        endOn = dateField(o, "endOn", "end_on", "endDate"),
-                        firstWeek = intField(o, "first", "firstWeek", "startWeek"),
-                        weeks = intField(o, "weeks", "weekCount", "totalWeeks"),
-                    )
-                }
-                o.entrySet().forEach { (_, v) ->
-                    parseCurSemester(v, depth + 1)?.let { return it }
-                }
-            }
-            element.isJsonArray -> {
-                element.asJsonArray.forEach { child ->
-                    parseCurSemester(child, depth + 1)?.let { return it }
-                }
-            }
-        }
-        return null
-    }
-
-    private fun firstSemesterCodeDeep(element: JsonElement?, depth: Int): String? {
+    fun firstSemesterCode(element: JsonElement?, depth: Int = 0): String? {
         if (depth > 14) return null
         return when {
             element == null || element.isJsonNull -> null
@@ -117,74 +77,28 @@ object BladeJson {
                 if (s.all { it.isDigit() } && s.length in 5..6) s else null
             }
             element.isJsonObject -> {
-                val keys =
-                    listOf(
-                        "code", "semesterCode", "semester_code", "xnxq", "xnxqh",
-                        "dqxnxqh", "dqXnxq", "semesterId",
-                    )
+                val keys = listOf(
+                    "code", "semesterCode", "semester_code", "xnxq", "xnxqh",
+                    "dqxnxqh", "dqXnxq", "semesterId",
+                )
                 for (k in keys) {
                     element.asJsonObject.get(k)?.let { hit ->
-                        firstSemesterCodeDeep(hit, depth + 1)?.let { return it }
+                        firstSemesterCode(hit, depth + 1)?.let { return it }
                     }
                 }
                 element.asJsonObject.entrySet().forEach { (_, v) ->
-                    firstSemesterCodeDeep(v, depth + 1)?.let { return it }
+                    firstSemesterCode(v, depth + 1)?.let { return it }
                 }
                 null
             }
             element.isJsonArray -> {
                 element.asJsonArray.forEach { child ->
-                    firstSemesterCodeDeep(child, depth + 1)?.let { return it }
+                    firstSemesterCode(child, depth + 1)?.let { return it }
                 }
                 null
             }
             else -> null
         }
-    }
-
-    private fun semesterCodeFromObject(o: JsonObject): String? {
-        for (k in listOf("code", "semesterCode", "semester_code", "xnxq", "xnxqh")) {
-            val s = o.get(k)?.takeIf { !it.isJsonNull }?.asString?.trim() ?: continue
-            if (s.all { it.isDigit() } && s.length in 5..6) return s
-        }
-        return null
-    }
-
-    private fun stringField(o: JsonObject, vararg keys: String): String? {
-        for (k in keys) {
-            val s = o.get(k)?.takeIf { !it.isJsonNull }?.asString?.trim()
-            if (!s.isNullOrEmpty()) return s
-        }
-        return null
-    }
-
-    private fun intField(o: JsonObject, vararg keys: String): Int? {
-        for (k in keys) {
-            val el = o.get(k) ?: continue
-            if (el.isJsonNull || !el.isJsonPrimitive) continue
-            val n = el.asString.trim().toIntOrNull() ?: runCatching { el.asInt }.getOrNull()
-            if (n != null) return n
-        }
-        return null
-    }
-
-    private fun dateField(o: JsonObject, vararg keys: String): LocalDate? {
-        for (k in keys) {
-            val raw = o.get(k)?.takeIf { !it.isJsonNull }?.asString?.trim() ?: continue
-            parseFlexibleLocalDate(raw)?.let { return it }
-        }
-        return null
-    }
-
-    fun parseFlexibleLocalDate(raw: String): LocalDate? {
-        val t = raw.trim()
-        if (t.isEmpty()) return null
-        runCatching { LocalDate.parse(t.take(10), startOnDate) }.getOrNull()?.let { return it }
-        runCatching { LocalDate.parse(t, startOnDateTime) }.getOrNull()?.let { return it }
-        if (t.length >= 10 && t[4] == '-' && t[7] == '-') {
-            return runCatching { LocalDate.parse(t.substring(0, 10)) }.getOrNull()
-        }
-        return null
     }
 
     /** 解析 getCurWeek 等接口的当前教学周；优先 curWeek，避免误读嵌套里的 week=1。 */

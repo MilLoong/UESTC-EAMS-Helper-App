@@ -23,6 +23,7 @@ data class ExamItem(
     val seat: String,
     val examType: String = "",
     val startEpochMillis: Long? = null,
+    val semester: String = "",
 ) {
     fun countdownMillis(now: Long = System.currentTimeMillis()): Long? {
         val start = startEpochMillis ?: return null

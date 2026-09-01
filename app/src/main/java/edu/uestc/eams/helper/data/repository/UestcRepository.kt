@@ -15,12 +15,10 @@ import edu.uestc.eams.helper.data.parser.TimetableJsonParser
 import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.data.session.SessionCookieStorage
 import edu.uestc.eams.helper.data.auth.ReauthSmsSendOutcome
-import edu.uestc.eams.helper.domain.model.CurSemester
 import edu.uestc.eams.helper.domain.model.ExamItem
 import edu.uestc.eams.helper.domain.model.GradeItem
 import edu.uestc.eams.helper.domain.model.GradesSummary
 import edu.uestc.eams.helper.domain.model.TimetableMeta
-import edu.uestc.eams.helper.domain.model.teachingWeekOn
 import edu.uestc.eams.helper.domain.model.UestcCourse
 import edu.uestc.eams.helper.domain.model.UserProfile
 import java.time.LocalDate
@@ -79,6 +77,7 @@ class UestcRepository(
     suspend fun refreshTimetable(
         week: Int? = null,
         forceNetwork: Boolean = false,
+        semesterCode: String? = null,
     ): Result<List<UestcCourse>> =
         runUserDataFetch {
             withContext(Dispatchers.IO) {
@@ -91,26 +90,14 @@ class UestcRepository(
                     return@withContext cache.loadCourses()
                 }
                 val ck = ensureMobileCookieHeader()
-                val semesterInfo = api.fetchCurSemester(ck)
-                val semester = semesterInfo?.code ?: "25262"
-                cache.ensureWeekCacheSemester(semester)
-                val prior = cache.loadTimetableMeta()
-                val maxWeek = (semesterInfo?.weeks ?: 30).coerceIn(1, 40)
-                val apiWeek = api.fetchCurWeek(ck, semester)
-                val weekOneMondayDate =
-                    resolveWeekOneMonday(
-                        semesterInfo,
-                        priorWeek =
-                            prior?.takeIf { it.semesterCode == semester }?.weekOneMondayDate(),
-                        apiWeekHint = apiWeek,
-                    )
-                val currentWeek =
-                    resolveCurrentWeek(
-                        weekOneMonday = weekOneMondayDate,
-                        apiWeek = apiWeek,
-                        maxWeek = maxWeek,
-                    )
+                val semester =
+                    semesterCode
+                        ?: api.fetchCurSemesterCode(ck)
+                        ?: cache.loadTimetableMeta()?.semesterCode
+                        ?: "25262"
+                val currentWeek = api.fetchCurWeek(ck, semester) ?: 1
                 val displayWeek = week?.coerceAtLeast(1) ?: currentWeek
+                val prior = cache.loadTimetableMeta()
                 val bumpDisplay =
                     week == null &&
                         prior != null &&
@@ -118,19 +105,28 @@ class UestcRepository(
                         prior.displayWeek == prior.currentWeek &&
                         prior.currentWeek != currentWeek
                 val resolvedDisplay = if (bumpDisplay) currentWeek else displayWeek
+                val sameSemester = prior?.semesterCode == semester
+                val weekOneMonday =
+                    TeachingWeekEstimator.resolvePersistedWeekOneMonday(
+                        stored = prior?.takeIf { sameSemester }?.weekOneMondayDate(),
+                        sameSemester = sameSemester,
+                        apiWeek = currentWeek,
+                        userLocked = sameSemester && prior?.weekOneLocked == true,
+                    ).toString()
                 val meta =
                     TimetableMeta(
                         semesterCode = semester,
                         currentWeek = currentWeek,
                         displayWeek = resolvedDisplay,
-                        weekOneMonday = weekOneMondayDate.toString(),
+                        weekOneMonday = weekOneMonday,
+                        weekOneLocked = sameSemester && prior?.weekOneLocked == true,
                     )
 
                 val fetchWeek = resolvedDisplay
                 if (!forceNetwork) {
                     cache.loadWeekCourses(semester, fetchWeek)?.let {
                         cache.saveTimetableMeta(meta)
-                        return@withContext cache.loadTimetableCoursesForUi()
+                        return@withContext cache.loadTimetableCoursesForUi(semester)
                     }
                 }
 
@@ -142,7 +138,7 @@ class UestcRepository(
                 cache.saveWeekCourses(semester, fetchWeek, courses)
                 cache.saveTimetableMeta(meta)
                 cache.setOfflineImported(false)
-                cache.loadTimetableCoursesForUi()
+                cache.loadTimetableCoursesForUi(semester)
             }
         }
 
@@ -158,56 +154,48 @@ class UestcRepository(
             if (!hasLocalSession() || cache.isOfflineImported()) return@withContext null
             runCatching {
                 val ck = ensureMobileCookieHeader()
-                val semesterInfo = api.fetchCurSemester(ck)
                 val semester =
-                    semesterInfo?.code
+                    api.fetchCurSemesterCode(ck)
                         ?: cache.loadTimetableMeta()?.semesterCode
                         ?: return@runCatching null
+                val apiWeek = api.fetchCurWeek(ck, semester) ?: return@runCatching null
                 val prior = cache.loadTimetableMeta()
-                val maxWeek = (semesterInfo?.weeks ?: 30).coerceIn(1, 40)
-                val apiWeek = api.fetchCurWeek(ck, semester)
-                val weekOneMondayDate =
-                    resolveWeekOneMonday(
-                        semesterInfo,
-                        priorWeek =
-                            prior?.takeIf { it.semesterCode == semester }?.weekOneMondayDate(),
-                        apiWeekHint = apiWeek,
-                    )
-                val currentWeek =
-                    resolveCurrentWeek(
-                        weekOneMonday = weekOneMondayDate,
+                val sameSemester = prior?.semesterCode == semester
+                val weekOneMonday =
+                    TeachingWeekEstimator.resolvePersistedWeekOneMonday(
+                        stored = prior?.takeIf { sameSemester }?.weekOneMondayDate(),
+                        sameSemester = sameSemester,
                         apiWeek = apiWeek,
-                        maxWeek = maxWeek,
-                    )
+                        userLocked = sameSemester && prior?.weekOneLocked == true,
+                    ).toString()
+                val calendarWeek =
+                    LocalDate.parse(weekOneMonday).let { anchor ->
+                        TeachingWeekEstimator.teachingWeekForDate(anchor, LocalDate.now())
+                    }
+                val currentWeek = maxOf(apiWeek, calendarWeek)
+                val bumpDisplay =
+                    prior != null &&
+                        sameSemester &&
+                        prior.displayWeek == prior.currentWeek &&
+                        prior.currentWeek != currentWeek
                 val displayWeek =
-                    resolveDisplayWeekAfterSync(
-                        prior = prior,
-                        semester = semester,
-                        currentWeek = currentWeek,
-                    )
+                    if (bumpDisplay) {
+                        currentWeek
+                    } else {
+                        prior?.displayWeek ?: currentWeek
+                    }
                 val meta =
                     TimetableMeta(
                         semesterCode = semester,
                         currentWeek = currentWeek,
                         displayWeek = displayWeek,
-                        weekOneMonday = weekOneMondayDate.toString(),
+                        weekOneMonday = weekOneMonday,
+                        weekOneLocked = sameSemester && prior?.weekOneLocked == true,
                     )
                 cache.saveTimetableMeta(meta)
                 meta
             }.getOrNull()
         }
-
-    /**
-     * 冷启动时把显示周对齐到「今天」所在教学周，避免仍停在上次退出时浏览的周次。
-     */
-    fun alignTimetableDisplayToToday(): TimetableMeta? {
-        val meta = cache.loadTimetableMeta() ?: return null
-        val todayWeek = meta.teachingWeekOn(LocalDate.now()).coerceAtLeast(1)
-        if (meta.displayWeek == todayWeek && meta.currentWeek == todayWeek) return meta
-        val updated = meta.copy(currentWeek = todayWeek, displayWeek = todayWeek)
-        cache.saveTimetableMeta(updated)
-        return updated
-    }
 
     /** 后台每日同步当前教学周课表：当日已同步且本地有缓存则不联网；无本地会话则跳过。 */
     suspend fun syncCurrentWeekTimetableIfNeeded(): Result<Unit> =
@@ -243,15 +231,17 @@ class UestcRepository(
             }
         }
 
-    suspend fun refreshExams(): Result<List<ExamItem>> =
+    suspend fun refreshExams(semester: String? = null): Result<List<ExamItem>> =
         runUserDataFetch {
             withContext(Dispatchers.IO) {
                 val ck = ensureMobileCookieHeader()
-                val semester = api.fetchCurSemesterCode(ck) ?: "25262"
+                val sem = semester ?: (api.fetchCurSemesterCode(ck) ?: "25262")
                 val json =
-                    api.fetchExamQueryJson(ck, semester)
+                    api.fetchExamQueryJson(ck, sem)
                         ?: throw IllegalStateException("考试接口无数据")
-                ExamJsonParser.parse(json).also { cache.saveExams(it) }
+                ExamJsonParser.parse(json)
+                    .map { it.copy(semester = sem) }
+                    .also { cache.saveExams(sem, it) }
             }
         }
 
@@ -267,15 +257,26 @@ class UestcRepository(
         }
 
     /** 按当前 Tab 只刷新对应数据。 */
-    suspend fun refreshForTab(tab: Int, timetableDisplayWeek: Int?): Result<Unit> =
+    suspend fun refreshForTab(
+        tab: Int,
+        timetableDisplayWeek: Int?,
+        semesterCode: String? = null,
+    ): Result<Unit> =
         runUserDataFetch {
             when (tab) {
                 0 ->
                     refreshTimetable(
                         week = timetableDisplayWeek,
                         forceNetwork = true,
+                        semesterCode = semesterCode,
                     ).getOrThrow()
-                1 -> refreshExams().getOrThrow()
+                1 -> {
+                    if (semesterCode.isNullOrBlank()) {
+                        refreshExams().getOrThrow()
+                    } else {
+                        refreshExams(semesterCode).getOrThrow()
+                    }
+                }
                 2 -> refreshGrades().getOrThrow()
                 else -> refreshUserProfile().getOrThrow()
             }
@@ -303,7 +304,8 @@ class UestcRepository(
 
     fun cachedUserProfile(): UserProfile? = cache.loadUserProfile()
 
-    fun cachedCourses(): List<UestcCourse> = cache.loadTimetableCoursesForUi()
+    fun cachedCourses(semesterCode: String): List<UestcCourse> =
+        if (semesterCode.isBlank()) emptyList() else cache.loadTimetableCoursesForUi(semesterCode)
     fun cachedTimetableMeta(): TimetableMeta? = cache.loadTimetableMeta()
     fun isOfflineImported(): Boolean = cache.isOfflineImported()
 
@@ -326,9 +328,8 @@ class UestcRepository(
                         currentWeek = currentWeek,
                         displayWeek = currentWeek.coerceIn(1, parsed.maxWeek),
                         weekOneMonday = weekOneMonday.toString(),
+                        weekOneLocked = true,
                     )
-                // 先切到导入学期（会清掉在线周缓存），再写入课表，避免 saveWeekCourses 中途清空刚写入的 courses
-                cache.ensureWeekCacheSemester(AcademicCache.IMPORT_SEMESTER)
                 cache.setOfflineImported(true)
                 cache.saveTimetableMeta(meta)
                 for (w in 1..parsed.maxWeek) {
@@ -354,8 +355,28 @@ class UestcRepository(
         cache.saveTimetableMeta(meta.copy(displayWeek = w))
         return cache.hasWeekCourses(meta.semesterCode, w)
     }
+
+    fun applyWeekOneMonday(selectedDay: LocalDate): TimetableMeta {
+        val meta =
+            cache.loadTimetableMeta()
+                ?: TimetableMeta(semesterCode = "", currentWeek = 1, displayWeek = 1)
+        val updated = TeachingWeekEstimator.alignTimetableMeta(meta, selectedDay)
+        cache.saveTimetableMeta(updated)
+        return updated
+    }
+
     fun cachedGrades(): List<GradeItem> = cache.loadGrades()
-    fun cachedExams(): List<ExamItem> = cache.loadExams()
+    fun cachedExams(semester: String): List<ExamItem> = cache.loadExams(semester)
+
+    /** 联网获取当前学期编码；无会话或失败时返回 null。 */
+    suspend fun fetchCurrentSemesterCode(): String? =
+        withContext(Dispatchers.IO) {
+            if (!hasLocalSession()) return@withContext null
+            runCatching {
+                val ck = ensureMobileCookieHeader()
+                api.fetchCurSemesterCode(ck)
+            }.getOrNull()
+        }
 
     private fun cookieHeaderOrNull(): String? {
         EamsAppCookie.pickJwtFromJar(jar)?.let { return EamsAppCookie.composeFromJar(jar, it) }
@@ -372,60 +393,13 @@ class UestcRepository(
         return hdr
     }
 
-    /** 优先用 getCurSemester.startOn；否则沿用缓存锚点；再否则按 curWeek 从今天反推。 */
-    private fun resolveWeekOneMonday(
-        semester: CurSemester?,
-        priorWeek: LocalDate?,
-        apiWeekHint: Int?,
-    ): LocalDate {
-        semester?.startOn?.let { return TeachingWeekEstimator.weekOneMondayFromStartOn(it) }
-        priorWeek?.let { return it }
-        val week = (apiWeekHint ?: 1).coerceAtLeast(1)
-        return TeachingWeekEstimator.weekOneMondayForCurrentWeek(week)
-    }
-
-    /**
-     * 有开学锚点时按日历算当前教学周（开学前为第 1 周）；
-     * 否则用 getCurWeek；两者都有时取较大值以防 API 滞后。
-     */
-    private fun resolveCurrentWeek(
-        weekOneMonday: LocalDate,
-        apiWeek: Int?,
-        maxWeek: Int,
-        today: LocalDate = LocalDate.now(),
-    ): Int {
-        val calendarWeek =
-            TeachingWeekEstimator.teachingWeekForDate(weekOneMonday, today, maxWeek)
-        val fromApi = apiWeek?.coerceIn(1, maxWeek)
-        return when {
-            fromApi == null -> calendarWeek
-            today.isBefore(weekOneMonday) -> 1
-            else -> maxOf(fromApi, calendarWeek)
-        }
-    }
-
-    /**
-     * 同步后显示哪一周：换学期或上次就在看「本周」时跟到 currentWeek；
-     * 同学期内若上次特意翻到其它周，则保留（会话内浏览）。
-     */
-    private fun resolveDisplayWeekAfterSync(
-        prior: TimetableMeta?,
-        semester: String,
-        currentWeek: Int,
-    ): Int {
-        if (prior == null || prior.semesterCode != semester) return currentWeek
-        if (prior.displayWeek == prior.currentWeek) return currentWeek
-        return prior.displayWeek.coerceAtLeast(1)
-    }
-
     private suspend fun <T> runUserDataFetch(block: suspend () -> T): Result<T> =
         try {
             Result.success(block())
         } catch (e: Throwable) {
             val mapped = UserDataFetchErrors.map(e)
-            if (mapped is EamsFetchException.SessionInvalid) {
-                clearLoginSession()
-            }
+            // 登录失效时不自动清空会话与缓存：学校会话经常过期，应默认沿用本地数据，
+            // 仅在用户主动重新登录或点刷新后提示，避免反复让用户重新登录。
             Result.failure(mapped)
         }
 }

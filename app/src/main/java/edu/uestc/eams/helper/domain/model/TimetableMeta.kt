@@ -7,8 +7,10 @@ data class TimetableMeta(
     val semesterCode: String,
     val currentWeek: Int,
     val displayWeek: Int,
-    /** 第 1 教学周周一，ISO 日期 yyyy-MM-dd；树维导入时写入。 */
+    /** 第 1 教学周周一，ISO 日期 yyyy-MM-dd。 */
     val weekOneMonday: String? = null,
+    /** 用户手动指定过开学周后，刷新不再覆盖该锚点。 */
+    val weekOneLocked: Boolean = false,
 ) {
     fun weekOneMondayDate(): LocalDate? =
         weekOneMonday?.let { runCatching { LocalDate.parse(it) }.getOrNull() }

@@ -32,8 +32,8 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 40
-        versionName = "1.2.10"
+        versionCode = 33
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -112,17 +112,86 @@ afterEvaluate {
     tasks.named("assembleDebug") {
         doLast {
             val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
-            if (!apkDir.isDirectory) return@doLast
-            val source =
-                apkDir.listFiles()
-                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
-                    ?.maxByOrNull { it.lastModified() }
-                    ?: return@doLast
+            val source = apkDir.resolve("app-debug.apk")
+            if (!source.isFile) return@doLast
             val dest = apkDir.resolve("UESTC-EAMS-Helper.apk")
-            if (source.absolutePath != dest.absolutePath) {
-                source.copyTo(dest, overwrite = true)
-                source.delete()
+            source.copyTo(dest, overwrite = true)
+        }
+    }
+
+    tasks.register("installDebugKeepSession") {
+        group = "install"
+        description = "覆盖安装 debug APK，不清登录数据（adb install -r）"
+        dependsOn("installDebug")
+    }
+
+    val adbPath =
+        (System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+            ?: "${System.getProperty("user.home")}/Android/Sdk") + "/platform-tools/adb"
+    val debugPkg = android.defaultConfig.applicationId ?: "com.milloong.uestc.Helper"
+    val sessionBackupDir = rootProject.layout.projectDirectory.dir(".local/emulator-session")
+    val sessionPrefFiles =
+        listOf(
+            "uestc_okhttp_cookie_snapshot_v1.xml",
+            "academic_cache.xml",
+        )
+
+    fun runAdb(vararg args: String): String {
+        val proc =
+            ProcessBuilder(listOf(adbPath) + args.toList())
+                .redirectErrorStream(true)
+                .start()
+        val out = proc.inputStream.bufferedReader().readText()
+        val code = proc.waitFor()
+        if (code != 0) {
+            error("adb ${args.joinToString(" ")} failed ($code): $out")
+        }
+        return out
+    }
+
+    tasks.register("backupEmulatorSession") {
+        group = "install"
+        description = "从模拟器备份登录 Cookie 与课表缓存到 .local/emulator-session/"
+        doLast {
+            val dir = sessionBackupDir.asFile
+            dir.mkdirs()
+            sessionPrefFiles.forEach { name ->
+                val dest = dir.resolve(name)
+                val proc =
+                    ProcessBuilder(adbPath, "exec-out", "run-as", debugPkg, "cat", "shared_prefs/$name")
+                        .start()
+                val bytes = proc.inputStream.readBytes()
+                val err = proc.errorStream.bufferedReader().readText()
+                val code = proc.waitFor()
+                if (code != 0 || bytes.isEmpty()) {
+                    println("skip $name: ${err.ifBlank { "empty (code=$code)" }}")
+                    return@forEach
+                }
+                dest.writeBytes(bytes)
+                println("backed up $name (${bytes.size} bytes) -> ${dest.path}")
             }
+        }
+    }
+
+    tasks.register("restoreEmulatorSession") {
+        group = "install"
+        description = "把 .local/emulator-session/ 写回模拟器（卸载重装后用，无需再登录）"
+        doLast {
+            val dir = sessionBackupDir.asFile
+            sessionPrefFiles.forEach { name ->
+                val src = dir.resolve(name)
+                if (!src.isFile) {
+                    println("skip $name: no local backup")
+                    return@forEach
+                }
+                val tmp = "/data/local/tmp/$name"
+                runAdb("push", src.absolutePath, tmp)
+                runAdb("shell", "chmod", "644", tmp)
+                runAdb("shell", "run-as", debugPkg, "cp", tmp, "shared_prefs/$name")
+                println("restored $name")
+            }
+            runAdb("shell", "am", "force-stop", debugPkg)
+            println("session restored; relaunch the app")
         }
     }
 }
@@ -139,6 +208,9 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.work.runtime)
     implementation(libs.gson)
+    implementation(libs.calendar.compose)
+    implementation(libs.sheets.core)
+    implementation(libs.sheets.input)
 
     implementation(libs.appcompat)
     implementation(libs.material)
