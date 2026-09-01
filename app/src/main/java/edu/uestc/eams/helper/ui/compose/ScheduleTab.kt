@@ -117,6 +117,8 @@ private const val WEEK_PICKER_MIN_RANGE = 20
 /** 固定可滑动周次下限；不按课程周次字段上限截断，避免排到第 16 周就无法往后浏览。 */
 private const val TIMETABLE_PAGE_COUNT = 30
 
+private fun scaledSp(base: Float, fontScale: Float) = (base * fontScale).sp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleTab(
