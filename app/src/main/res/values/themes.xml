@@ -1,8 +1,40 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<resources>
+    <style name="AppShapeExtraSmall" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">4dp</item>
+    </style>
+    <style name="AppShapeSmall" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="AppShapeMedium" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="AppShapeLarge" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">8dp</item>
+    </style>
+
     <style name="Base.Theme.UESTCEAMSHelper" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="colorPrimary">@color/app_primary</item>
+        <item name="colorOnPrimary">@color/app_on_primary</item>
+        <item name="android:colorBackground">@color/app_background</item>
+        <item name="colorSurface">@color/app_surface</item>
+        <item name="colorOnSurface">@color/app_on_surface</item>
+        <item name="shapeAppearanceCornerExtraSmall">@style/AppShapeExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/AppShapeSmall</item>
+        <item name="shapeAppearanceCornerMedium">@style/AppShapeMedium</item>
+        <item name="shapeAppearanceCornerLarge">@style/AppShapeLarge</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/AppShapeLarge</item>
+        <item name="colorPrimaryContainer">@color/app_primary_container</item>
+        <item name="colorSecondary">@color/app_primary</item>
+        <item name="colorOnSecondary">@color/app_on_primary</item>
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:statusBarColor">@color/app_surface</item>
+        <item name="android:navigationBarColor">@color/app_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="elevationOverlayEnabled">false</item>
     </style>
 
     <style name="Theme.UESTCEAMSHelper" parent="Base.Theme.UESTCEAMSHelper" />

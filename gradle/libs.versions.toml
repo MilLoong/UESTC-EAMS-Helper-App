@@ -14,6 +14,8 @@ lifecycle = "2.8.7"
 compose-bom = "2024.10.01"
 work = "2.10.0"
 gson = "2.11.0"
+calendar = "2.6.2"
+sheets = "1.3.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -39,6 +41,9 @@ compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+calendar-compose = { group = "com.kizitonwose.calendar", name = "compose", version.ref = "calendar" }
+sheets-core = { group = "com.maxkeppeler.sheets-compose-dialogs", name = "core", version.ref = "sheets" }
+sheets-input = { group = "com.maxkeppeler.sheets-compose-dialogs", name = "input", version.ref = "sheets" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
