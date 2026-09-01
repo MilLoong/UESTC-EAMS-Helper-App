@@ -55,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import edu.uestc.eams.helper.BuildConfig
 import edu.uestc.eams.helper.CourseWebActivity
 import edu.uestc.eams.helper.data.network.ApiConstants
+import edu.uestc.eams.helper.domain.model.SemesterCodes
 import edu.uestc.eams.helper.ui.viewmodel.MainViewModel
 
 @Composable
@@ -114,7 +115,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         currentSemesterCode = state.currentSemesterCode,
                         isCurrentSemester =
                             state.scheduleSemester == null ||
-                                state.scheduleSemester == state.currentSemesterCode,
+                                SemesterCodes.same(state.scheduleSemester, state.currentSemesterCode),
                         onSemesterSelect = { viewModel.selectScheduleSemester(it) },
                         pagerScrollWeek = state.timetablePagerScrollWeek,
                         modifier = Modifier.fillMaxSize(),
@@ -162,6 +163,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         onReminderLeadMinutesChange = { viewModel.setReminderLeadMinutes(it) },
                         onAdjustWeekOne = { viewModel.applyWeekOneMonday(it) },
                         onLogin = { viewModel.showLogin() },
+                        onLogout = { viewModel.logout() },
                         onWebLogin = {
                             CourseWebActivity.start(
                                 context,

@@ -66,6 +66,7 @@ fun ProfileTab(
     onReminderLeadMinutesChange: (Int) -> Unit,
     onAdjustWeekOne: (LocalDate) -> Unit = {},
     onLogin: () -> Unit,
+    onLogout: () -> Unit = {},
     onWebLogin: () -> Unit = {},
     onImportTimetable: () -> Unit = {},
     timetableLayout: TimetableLayoutSettings = TimetableLayoutSettings(),
@@ -142,8 +143,16 @@ fun ProfileTab(
                         .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // 已登录时不展示账号登录；会话过期会把 loggedIn 置 false，再显示以便重新登录。
-                if (!loggedIn) {
+                // 已登录：退出登录；未登录/会话过期：账号登录或重新登录
+                if (loggedIn) {
+                    OutlinedButton(
+                        onClick = onLogout,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("退出登录")
+                    }
+                } else {
                     Button(
                         onClick = onLogin,
                         shape = MaterialTheme.shapes.small,
