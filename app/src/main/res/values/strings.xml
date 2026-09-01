@@ -3,8 +3,8 @@
 
     <string name="login_freeze_warning">请勿频繁登录：统一认证多次登录可能导致账号被冻结。已有网页会话时优先用「我的」页 [网页登录] 与 [导入会话]，避免重复登录。</string>
     <string name="login_browser_fallback_hint">若 App 内登录不成功，可点 Web 打开网页登录，再 [导入会话] 后点 [刷新]。</string>
-    <string name="login_credentials_title">学号密码登录</string>
-    <string name="login_credentials_subtitle">只需填写学号和密码。若学校要求短信二次认证，下一步才会出现验证码页。</string>
+    <string name="login_credentials_title">统一身份认证</string>
+    <string name="login_credentials_subtitle">填写学号和密码后，先点「获取验证码」。若学校要求短信二次认证，再填写验证码并点「登录」。</string>
     <string name="login_sms_title">短信验证码</string>
     <string name="login_sms_subtitle">学校已要求二次认证。请填写手机收到的验证码，无需再输入学号和密码。</string>
 

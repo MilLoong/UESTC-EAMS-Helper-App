@@ -54,6 +54,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
@@ -61,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
@@ -97,6 +101,80 @@ private val weekStateLabelWidth = 48.dp
 /** 单次双指手势允许的整体缩放范围，配合 TimetableLayoutSettings 的上下限共同生效。 */
 private const val MIN_GRID_ZOOM = 0.6f
 private const val MAX_GRID_ZOOM = 1.7f
+
+/** 边缘继续拖动超过该距离（px）则切周。 */
+private const val WEEK_EDGE_DRAG_PX = 88f
+
+/** 边缘惯性滑动速度超过该值（px/s）则切周。 */
+private const val WEEK_EDGE_FLING_VX = 900f
+
+/**
+ * 课表边缘切周：子布局先消费横向滚动；滚不动的剩余位移/速度交给这里。
+ * 双指缩放时由外层 [pinching] 短路，避免与 pinch 抢手势。
+ */
+private class WeekEdgeNestedScrollConnection(
+    private val pinching: () -> Boolean,
+    private val onPrevWeek: () -> Unit,
+    private val onNextWeek: () -> Unit,
+) : NestedScrollConnection {
+    private var overscrollX = 0f
+    private var triggered = false
+
+    fun resetGesture() {
+        overscrollX = 0f
+        triggered = false
+    }
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset {
+        if (pinching() || source != NestedScrollSource.UserInput) return Offset.Zero
+        if (consumed.x != 0f) {
+            overscrollX = 0f
+            triggered = false
+        }
+        if (available.x == 0f || triggered) return Offset.Zero
+        overscrollX += available.x
+        when {
+            overscrollX >= WEEK_EDGE_DRAG_PX -> {
+                triggered = true
+                overscrollX = 0f
+                onPrevWeek()
+            }
+            overscrollX <= -WEEK_EDGE_DRAG_PX -> {
+                triggered = true
+                overscrollX = 0f
+                onNextWeek()
+            }
+        }
+        return Offset.Zero
+    }
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+        if (pinching()) {
+            resetGesture()
+            return Velocity.Zero
+        }
+        val vx = available.x
+        val handled =
+            when {
+                triggered -> true
+                vx >= WEEK_EDGE_FLING_VX || overscrollX >= WEEK_EDGE_DRAG_PX -> {
+                    onPrevWeek()
+                    true
+                }
+                vx <= -WEEK_EDGE_FLING_VX || overscrollX <= -WEEK_EDGE_DRAG_PX -> {
+                    onNextWeek()
+                    true
+                }
+                else -> false
+            }
+        resetGesture()
+        return if (handled) available.copy(y = 0f) else Velocity.Zero
+    }
+}
 
 /** 精简版课程名最多 4 个字；允许换行，保证在窄卡片里也能完整显示。 */
 private const val COMPACT_NAME_MAX_LINES = 2
@@ -290,6 +368,9 @@ fun ScheduleTab(
                 isCurrentSemester = isCurrentSemester,
                 courseClicksEnabled = !gridPinching,
                 onCourseClick = { detailCourse = it },
+                onPrevWeek = onPrevWeek,
+                onNextWeek = onNextWeek,
+                gridPinching = gridPinching,
                 onGridPinchCommit = { factor ->
                     if (abs(factor - 1f) > 0.01f) {
                         onLayoutChange(layout.scaledGridBy(factor))
@@ -363,6 +444,9 @@ private fun ScheduleWeekPage(
     isCurrentSemester: Boolean = true,
     courseClicksEnabled: Boolean = true,
     onCourseClick: (UestcCourse) -> Unit,
+    onPrevWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    gridPinching: Boolean,
     onGridPinchCommit: (Float) -> Unit,
     onGridPinchingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -392,6 +476,17 @@ private fun ScheduleWeekPage(
         }
     val latestOnGridPinchCommit by rememberUpdatedState(onGridPinchCommit)
     val latestOnGridPinchingChange by rememberUpdatedState(onGridPinchingChange)
+    val latestOnPrevWeek by rememberUpdatedState(onPrevWeek)
+    val latestOnNextWeek by rememberUpdatedState(onNextWeek)
+    val latestPinching by rememberUpdatedState(gridPinching)
+    val weekEdgeScroll =
+        remember {
+            WeekEdgeNestedScrollConnection(
+                pinching = { latestPinching },
+                onPrevWeek = { latestOnPrevWeek() },
+                onNextWeek = { latestOnNextWeek() },
+            )
+        }
 
     BoxWithConstraints(modifier) {
         val timeColumnWidth = gridLayout.timeColumnWidthDp.dp
@@ -461,10 +556,13 @@ private fun ScheduleWeekPage(
                             }
                         }
                     }
+                    // nestedScroll 在滚动修饰符外侧：子布局先横滑；到边缘后剩余手势用于切周。
+                    // 双指缩放仍只在网格 pointerInput 内处理，pinching 时切周短路。
                     Box(
                         Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .nestedScroll(weekEdgeScroll)
                             .horizontalScroll(hScroll)
                             .verticalScroll(vScroll),
                     ) {
@@ -483,6 +581,7 @@ private fun ScheduleWeekPage(
                                             if (pressed.size >= 2) {
                                                 if (!pinching) {
                                                     pinching = true
+                                                    weekEdgeScroll.resetGesture()
                                                     latestOnGridPinchingChange(true)
                                                 }
                                                 val a = pressed[0].position
@@ -512,6 +611,8 @@ private fun ScheduleWeekPage(
                                             val factor = gestureScale
                                             gestureScale = 1f
                                             latestOnGridPinchCommit(factor)
+                                        } else {
+                                            weekEdgeScroll.resetGesture()
                                         }
                                     }
                                 }
