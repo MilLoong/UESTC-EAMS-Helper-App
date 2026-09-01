@@ -78,11 +78,17 @@ class EamsAppApi(private val client: OkHttpClient) {
         return fetchApiDataJson(url.toString(), cookieHeader, "成绩")
     }
 
-    fun fetchExamQueryJson(cookieHeader: String, semester: String, examTypeId: String = "1"): JsonElement? {
+    fun fetchExamQueryJson(
+        cookieHeader: String,
+        semester: String,
+        studentCode: String,
+        examTypeId: String = "1",
+    ): JsonElement? {
         val url =
             ApiConstants.EAMSAPP_ORIGIN.toHttpUrl().newBuilder()
                 .encodedPath("/api/ydzc-app/examTake/query")
                 .addQueryParameter("semester", semester)
+                .addQueryParameter("code", studentCode)
                 .addQueryParameter("examTypeId", examTypeId)
                 .build()
         return fetchApiDataJson(url.toString(), cookieHeader, "考试")
@@ -171,7 +177,8 @@ class EamsAppApi(private val client: OkHttpClient) {
 
     private fun fetchApiDataJson(url: String, cookieHeader: String, label: String): JsonElement? {
         val (rsp, body) = get(url, cookieHeader)
-        if (BladeJson.responseAuthFailed(rsp, body)) {
+        // 会话过期时网关常仍返回 HTTP 200 + 登录 HTML，应提示重新登录而不是「接口异常」。
+        if (BladeJson.looksLikeHtml(body) || BladeJson.responseAuthFailed(rsp, body)) {
             throw IllegalStateException("$label 接口会话失效，请重新登录。")
         }
         if (!BladeJson.responseOk(rsp, body)) {

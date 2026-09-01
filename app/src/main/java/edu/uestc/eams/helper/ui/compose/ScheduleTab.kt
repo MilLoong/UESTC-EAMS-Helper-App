@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import edu.uestc.eams.helper.data.mapper.TimetableWeekCalendar
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
@@ -137,7 +139,6 @@ fun ScheduleTab(
     var detailCourse by remember { mutableStateOf<UestcCourse?>(null) }
     var gridPinching by remember { mutableStateOf(false) }
     var weekMenuExpanded by remember { mutableStateOf(false) }
-    val axisLayout = remember { TimetableLayoutSettings().coerce() }
     val showResetGridFab = !layout.isDefaultGridSize()
     val maxWeek =
         remember(courses, currentWeek, displayWeek) {
@@ -285,7 +286,6 @@ fun ScheduleTab(
                 currentWeek = currentWeek,
                 today = today,
                 weekOneMonday = weekOneMonday,
-                axisLayout = axisLayout,
                 gridLayout = layout,
                 isCurrentSemester = isCurrentSemester,
                 courseClicksEnabled = !gridPinching,
@@ -359,7 +359,6 @@ private fun ScheduleWeekPage(
     currentWeek: Int,
     today: LocalDate,
     weekOneMonday: LocalDate?,
-    axisLayout: TimetableLayoutSettings,
     gridLayout: TimetableLayoutSettings,
     isCurrentSemester: Boolean = true,
     courseClicksEnabled: Boolean = true,
@@ -384,161 +383,167 @@ private fun ScheduleWeekPage(
     val byDay = remember(visible) { visible.groupBy { it.weekday } }
     val vScroll = rememberScrollState()
     val hScroll = rememberScrollState()
-    // 双指缩放目前只对课程网格生效，不改变左侧节次列。缩放期间通过 gestureScale
-    // 实时修改布局尺寸（替代 graphicsLayer 预览），这样内容放大后网格可继续滚动，
-    // 手指松开后才把累计倍率提交到上层持久化设置。
+    // 双指缩放改行高/列宽，卡片随格子拉长缩短；松手后写入持久化设置。
+    // 缩小时不低于可视区域铺满，避免网格旁边空出一大块。
     var gestureScale by remember { mutableFloatStateOf(1f) }
     val displayLayout =
         remember(gridLayout, gestureScale) {
             if (gestureScale == 1f) gridLayout else gridLayout.scaledGridBy(gestureScale)
         }
-    val timeColumnWidth = axisLayout.timeColumnWidthDp.dp
-    val dayColumnWidth = displayLayout.dayColumnWidthDp.dp
-    val rowHeight = displayLayout.rowHeightDp.dp
-    val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
-    val dayGridWidth = dayColumnWidth * 7
-    // 双指手势协程在 pointerInput(Unit) 中不会随重组重启，需读取最新回调值。
     val latestOnGridPinchCommit by rememberUpdatedState(onGridPinchCommit)
     val latestOnGridPinchingChange by rememberUpdatedState(onGridPinchingChange)
 
-    Column(modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(dayHeaderHeight)
-                .background(MaterialTheme.colorScheme.surface),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.width(timeColumnWidth))
+    BoxWithConstraints(modifier) {
+        val timeColumnWidth = gridLayout.timeColumnWidthDp.dp
+        val daysAvailWidth = (maxWidth - timeColumnWidth).coerceAtLeast(0.dp)
+        val bodyAvailHeight = (maxHeight - dayHeaderHeight).coerceAtLeast(0.dp)
+        val fillDayWidth = daysAvailWidth / 7
+        val fillRowHeight = bodyAvailHeight / UestcPeriodTime.maxPeriod
+        val dayColumnWidth = max(displayLayout.dayColumnWidthDp.dp, fillDayWidth)
+        val rowHeight = max(displayLayout.rowHeightDp.dp, fillRowHeight)
+        val fontScale = displayLayout.fontScale
+        val gridHeight = rowHeight * UestcPeriodTime.maxPeriod
+        val dayGridWidth = dayColumnWidth * 7
+
+        Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier
-                    .weight(1f)
-                    .horizontalScroll(hScroll),
+                    .fillMaxWidth()
+                    .height(dayHeaderHeight)
+                    .background(MaterialTheme.colorScheme.surface),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(Modifier.width(dayGridWidth)) {
-                    for (d in 1..7) {
-                        val date = TimetableWeekCalendar.dateForWeekday(weekMonday, d)
-                        DayHeaderCell(
-                            dayLabel = TimetableWeekCalendar.shortDayLabel(d),
-                            dateLabel = "${date.dayOfMonth}",
-                            isToday = date == today,
-                            showDate = isCurrentSemester,
-                            fontScale = axisLayout.fontScale,
-                            modifier = Modifier.width(dayColumnWidth),
-                        )
-                    }
-                }
-            }
-        }
-        HorizontalDivider()
-        Box(Modifier.weight(1f)) {
-            Row(Modifier.fillMaxSize()) {
-                Column(
-                    Modifier
-                        .width(timeColumnWidth)
-                        .verticalScroll(vScroll),
-                ) {
-                    Box(
-                        Modifier
-                            .height(gridHeight)
-                            .background(MaterialTheme.colorScheme.surface)
-                            .timetableNoonDivider(gridLayout.showNoonDivider, rowHeight),
-                    ) {
-                        Column(Modifier.fillMaxSize()) {
-                            UestcPeriodTime.slots.forEach { slot ->
-                                PeriodLabelCell(
-                                    slot.index,
-                                    slot.start,
-                                    slot.end,
-                                    rowHeight,
-                                    axisLayout.fontScale,
-                                )
-                            }
-                        }
-                    }
-                }
-                Box(
+                Box(Modifier.width(timeColumnWidth))
+                Row(
                     Modifier
                         .weight(1f)
-                        .fillMaxHeight()
-                        .horizontalScroll(hScroll)
-                        .verticalScroll(vScroll),
+                        .horizontalScroll(hScroll),
                 ) {
-                        Box(
-                        Modifier
-                            .width(dayGridWidth)
-                            .height(gridHeight)
-                            .pointerInput(Unit) {
-                                awaitEachGesture {
-                                    awaitFirstDown(requireUnconsumed = false)
-                                    var lastDistance = 0f
-                                    var pinching = false
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        val pressed = event.changes.filter { it.pressed }
-                                        if (pressed.size >= 2) {
-                                            if (!pinching) {
-                                                pinching = true
-                                                latestOnGridPinchingChange(true)
-                                            }
-                                            val a = pressed[0].position
-                                            val b = pressed[1].position
-                                            val dx = a.x - b.x
-                                            val dy = a.y - b.y
-                                            val distance = sqrt(dx * dx + dy * dy)
-                                            if (lastDistance > 0f && distance > 0f) {
-                                                val change = distance / lastDistance
-                                                if (change.isFinite()) {
-                                                    gestureScale =
-                                                        (gestureScale * change).coerceIn(
-                                                            MIN_GRID_ZOOM,
-                                                            MAX_GRID_ZOOM,
-                                                        )
-                                                }
-                                            }
-                                            lastDistance = distance
-                                            pressed.forEach { it.consume() }
-                                        } else {
-                                            lastDistance = 0f
-                                        }
-                                        if (event.changes.none { it.pressed }) break
-                                    }
-                                    if (pinching) {
-                                        latestOnGridPinchingChange(false)
-                                        val factor = gestureScale
-                                        gestureScale = 1f
-                                        latestOnGridPinchCommit(factor)
-                                    }
-                                }
-                            }
-                            .timetableGridMesh(gridLayout.gridMesh, rowHeight, dayColumnWidth)
-                            .timetableNoonSeparator(gridLayout.showNoonDivider, rowHeight),
-                    ) {
-                        Row(Modifier.fillMaxSize()) {
-                            for (d in 1..7) {
-                                DayColumn(
-                                    courses = byDay[d].orEmpty(),
-                                    rowHeight = rowHeight,
-                                    gridHeight = gridHeight,
-                                    fontScale = displayLayout.fontScale,
-                                    courseNameMode = gridLayout.courseNameMode,
-                                    courseCardBorder = gridLayout.courseCardBorder,
-                                    courseClicksEnabled = courseClicksEnabled,
-                                    onCourseClick = onCourseClick,
-                                    modifier = Modifier.width(dayColumnWidth),
-                                )
-                            }
+                    Row(Modifier.width(dayGridWidth)) {
+                        for (d in 1..7) {
+                            val date = TimetableWeekCalendar.dateForWeekday(weekMonday, d)
+                            DayHeaderCell(
+                                dayLabel = TimetableWeekCalendar.shortDayLabel(d),
+                                dateLabel = "${date.dayOfMonth}",
+                                isToday = date == today,
+                                showDate = isCurrentSemester,
+                                fontScale = fontScale,
+                                modifier = Modifier.width(dayColumnWidth),
+                            )
                         }
                     }
                 }
             }
-            if (visible.isEmpty()) {
-                Text(
-                    "本周无课程",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                    modifier = Modifier.align(Alignment.Center),
-                )
+            HorizontalDivider()
+            Box(Modifier.weight(1f)) {
+                Row(Modifier.fillMaxSize()) {
+                    Column(
+                        Modifier
+                            .width(timeColumnWidth)
+                            .verticalScroll(vScroll),
+                    ) {
+                        Box(
+                            Modifier
+                                .height(gridHeight)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .timetableNoonDivider(gridLayout.showNoonDivider, rowHeight),
+                        ) {
+                            Column(Modifier.fillMaxSize()) {
+                                UestcPeriodTime.slots.forEach { slot ->
+                                    PeriodLabelCell(
+                                        slot.index,
+                                        slot.start,
+                                        slot.end,
+                                        rowHeight,
+                                        fontScale,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .horizontalScroll(hScroll)
+                            .verticalScroll(vScroll),
+                    ) {
+                        Box(
+                            Modifier
+                                .width(dayGridWidth)
+                                .height(gridHeight)
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false)
+                                        var lastDistance = 0f
+                                        var pinching = false
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val pressed = event.changes.filter { it.pressed }
+                                            if (pressed.size >= 2) {
+                                                if (!pinching) {
+                                                    pinching = true
+                                                    latestOnGridPinchingChange(true)
+                                                }
+                                                val a = pressed[0].position
+                                                val b = pressed[1].position
+                                                val dx = a.x - b.x
+                                                val dy = a.y - b.y
+                                                val distance = sqrt(dx * dx + dy * dy)
+                                                if (lastDistance > 0f && distance > 0f) {
+                                                    val change = distance / lastDistance
+                                                    if (change.isFinite()) {
+                                                        gestureScale =
+                                                            (gestureScale * change).coerceIn(
+                                                                MIN_GRID_ZOOM,
+                                                                MAX_GRID_ZOOM,
+                                                            )
+                                                    }
+                                                }
+                                                lastDistance = distance
+                                                pressed.forEach { it.consume() }
+                                            } else {
+                                                lastDistance = 0f
+                                            }
+                                            if (event.changes.none { it.pressed }) break
+                                        }
+                                        if (pinching) {
+                                            latestOnGridPinchingChange(false)
+                                            val factor = gestureScale
+                                            gestureScale = 1f
+                                            latestOnGridPinchCommit(factor)
+                                        }
+                                    }
+                                }
+                                .timetableGridMesh(gridLayout.gridMesh, rowHeight, dayColumnWidth)
+                                .timetableNoonSeparator(gridLayout.showNoonDivider, rowHeight),
+                        ) {
+                            Row(Modifier.fillMaxSize()) {
+                                for (d in 1..7) {
+                                    DayColumn(
+                                        courses = byDay[d].orEmpty(),
+                                        rowHeight = rowHeight,
+                                        gridHeight = gridHeight,
+                                        fontScale = fontScale,
+                                        courseNameMode = gridLayout.courseNameMode,
+                                        courseCardBorder = gridLayout.courseCardBorder,
+                                        courseClicksEnabled = courseClicksEnabled,
+                                        onCourseClick = onCourseClick,
+                                        modifier = Modifier.width(dayColumnWidth),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if (visible.isEmpty()) {
+                    Text(
+                        "本周无课程",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
             }
         }
     }
@@ -751,12 +756,14 @@ private fun DayColumn(
     }
 }
 
-@Composable
 private fun courseCardNameMaxLines(periodSpan: Int): Int =
     (periodSpan * 2 + 1).coerceIn(2, 10)
 
 private fun courseCardRoomMaxLines(periodSpan: Int): Int =
     (periodSpan + 2).coerceIn(2, 8)
+
+private fun courseCardTeacherMaxLines(periodSpan: Int): Int =
+    periodSpan.coerceIn(1, 4)
 
 @Composable
 private fun CourseCard(
@@ -833,6 +840,18 @@ private fun CourseCard(
                 overflow = TextOverflow.Clip,
                 color = contentColor.copy(alpha = 0.88f),
                 modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        val teacher = course.teacher.trim()
+        if (teacher.isNotEmpty()) {
+            Text(
+                teacher,
+                fontSize = scaledSp(8f, fontScale),
+                lineHeight = scaledSp(9f, fontScale),
+                maxLines = courseCardTeacherMaxLines(periodSpan),
+                overflow = TextOverflow.Clip,
+                color = contentColor.copy(alpha = 0.82f),
+                modifier = Modifier.padding(top = 1.dp),
             )
         }
     }

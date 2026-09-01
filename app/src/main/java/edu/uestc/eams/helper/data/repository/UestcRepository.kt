@@ -243,8 +243,9 @@ class UestcRepository(
             withContext(Dispatchers.IO) {
                 val ck = ensureMobileCookieHeader()
                 val sem = semester ?: (api.fetchCurSemesterCode(ck) ?: "25262")
+                val code = api.resolveStudentCode(ck)
                 val json =
-                    api.fetchExamQueryJson(ck, sem)
+                    api.fetchExamQueryJson(ck, sem, code)
                         ?: throw IllegalStateException("考试接口无数据")
                 ExamJsonParser.parse(json)
                     .map { it.copy(semester = sem) }

@@ -43,7 +43,7 @@ data class TimetableLayoutSettings(
 
     fun scaledBy(factor: Float): TimetableLayoutSettings = scaledGridBy(factor)
 
-    /** 双指缩放仅影响课程网格，不改变左侧节次列宽度。 */
+    /** 双指缩放改变课程网格行高/列宽与字号；左侧节次列宽单独由设置控制。 */
     fun scaledGridBy(factor: Float): TimetableLayoutSettings = coerce().let { base ->
         if (factor == 1f) base
         else {
