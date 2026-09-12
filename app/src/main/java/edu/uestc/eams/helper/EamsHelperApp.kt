@@ -13,6 +13,7 @@ import edu.uestc.eams.helper.data.network.InMemoryCookieJar
 import edu.uestc.eams.helper.data.repository.UestcRepository
 import edu.uestc.eams.helper.data.session.SessionCookieStorage
 import edu.uestc.eams.helper.data.prefs.ThemePreferences
+import edu.uestc.eams.helper.notification.CourseReminderAlarmScheduler
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
 import edu.uestc.eams.helper.worker.TimetableSyncWorker
 import java.util.concurrent.TimeUnit
@@ -44,7 +45,9 @@ class EamsHelperApp : Application() {
     override fun onCreate() {
         super.onCreate()
         sessionCookieStorage.restoreInto(cookieJar)
-        scheduleCourseNotifications()
+        // 精确闹钟负责到点提醒；WorkManager 仅作兜底补挂闹钟
+        CourseReminderAlarmScheduler.reschedule(this)
+        scheduleCourseNotificationFallback()
         scheduleDailyTimetableSync()
     }
 
@@ -64,13 +67,13 @@ class EamsHelperApp : Application() {
         )
     }
 
-    private fun scheduleCourseNotifications() {
+    private fun scheduleCourseNotificationFallback() {
         val request =
             PeriodicWorkRequestBuilder<CourseNotificationWorker>(15, TimeUnit.MINUTES)
                 .build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             CourseNotificationWorker.UNIQUE_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
     }

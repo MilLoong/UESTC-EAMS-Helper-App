@@ -7,16 +7,22 @@ import edu.uestc.eams.helper.data.local.AcademicCache
 import edu.uestc.eams.helper.data.mapper.UestcPeriodTime
 import edu.uestc.eams.helper.data.prefs.CourseReminderPreferences
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
+import edu.uestc.eams.helper.notification.CourseReminderAlarmScheduler
 import edu.uestc.eams.helper.notification.CourseReminderPlanner
 import java.time.LocalDate
 
-/** 定时检查课表并发送上课提醒。 */
+/**
+ * 兜底：补挂精确闹钟；若已在提前提醒窗口内则立刻发一条（防闹钟被系统清掉）。
+ * 主路径是 [CourseReminderAlarmScheduler]，不依赖本 Worker 是否准时跑。
+ */
 class CourseNotificationWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        CourseReminderAlarmScheduler.reschedule(applicationContext)
+
         val cache = AcademicCache(applicationContext)
         val meta = cache.loadTimetableMeta()
         val leadSec = CourseReminderPreferences(applicationContext).leadSeconds

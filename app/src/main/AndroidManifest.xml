@@ -4,6 +4,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- setAlarmClock 本身一般不依赖此权限；声明以便部分机型上精确唤醒更稳 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:ignore="ExactAlarm" />
 
     <application
         android:name=".EamsHelperApp"
@@ -30,6 +35,19 @@
             android:name=".CourseWebActivity"
             android:exported="false"
             android:hardwareAccelerated="true" />
+
+        <receiver
+            android:name=".receiver.CourseReminderReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".receiver.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

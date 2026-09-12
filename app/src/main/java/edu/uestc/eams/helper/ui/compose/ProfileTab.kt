@@ -397,7 +397,7 @@ fun ProfileTab(
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("上课提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "在距开课 1～${CourseReminderPreferences.formatLeadLabel(reminderLeadMinutes)} 内发送通知（可选 ${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MIN_LEAD_MINUTES)}～${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MAX_LEAD_MINUTES)}，后台约每 15 分钟检查当天与次日课表）",
+                "开课前 ${CourseReminderPreferences.formatLeadLabel(reminderLeadMinutes)} 发通知（可选 ${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MIN_LEAD_MINUTES)}～${CourseReminderPreferences.formatLeadLabel(CourseReminderPreferences.MAX_LEAD_MINUTES)}）。按课表精确闹钟提醒，App 在后台也会响；若个别国产系统仍拦截，请在系统设置里允许本应用通知，并关闭对该应用的极端省电限制。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 modifier = Modifier.padding(top = 6.dp),

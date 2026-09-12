@@ -30,6 +30,7 @@ import edu.uestc.eams.helper.data.network.EamsFetchException
 import edu.uestc.eams.helper.data.parser.TeachingWeekEstimator
 import edu.uestc.eams.helper.data.parser.WakeUpShuweiHtmlParser
 import edu.uestc.eams.helper.notification.CourseNotificationHelper
+import edu.uestc.eams.helper.notification.CourseReminderAlarmScheduler
 import java.time.DayOfWeek
 import java.time.LocalDate
 import kotlinx.coroutines.CancellableContinuation
@@ -1003,10 +1004,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 CourseReminderPreferences.MAX_LEAD_MINUTES,
             )
         reminderPrefs.leadMinutes = clamped
+        CourseReminderAlarmScheduler.reschedule(getApplication())
         _ui.update {
             it.copy(
                 reminderLeadMinutes = clamped,
-                message = "已设置：开课前 ${CourseReminderPreferences.formatLeadLabel(clamped)} 内提醒",
+                message = "已设置：开课前 ${CourseReminderPreferences.formatLeadLabel(clamped)} 提醒（已重新挂闹钟）",
             )
         }
     }
@@ -1157,6 +1159,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 contentLoading = false,
             )
         }
+        // 课表缓存变化后重新挂精确闹钟，保证后台到点仍能提醒
+        CourseReminderAlarmScheduler.reschedule(getApplication())
     }
 
     /** UI / 缓存 / 课表 meta 依次取当前学期，保证成绩栏也能显示「当前学期」。 */

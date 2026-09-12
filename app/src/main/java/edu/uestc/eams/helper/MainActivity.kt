@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import edu.uestc.eams.helper.ui.compose.MainScreen
 import edu.uestc.eams.helper.ui.theme.UestcHelperTheme
+import edu.uestc.eams.helper.notification.CourseReminderAlarmScheduler
 import edu.uestc.eams.helper.worker.CourseNotificationWorker
 
 class MainActivity : ComponentActivity() {
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         maybeRequestNotificationPermission()
         intent?.getIntExtra(CourseNotificationWorker.EXTRA_OPEN_TAB, -1)?.takeIf { it >= 0 }
+        CourseReminderAlarmScheduler.reschedule(applicationContext)
 
         setContent {
             val app = application as EamsHelperApp
