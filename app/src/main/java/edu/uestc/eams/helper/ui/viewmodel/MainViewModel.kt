@@ -1008,7 +1008,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _ui.update {
             it.copy(
                 reminderLeadMinutes = clamped,
-                message = "已设置：开课前 ${CourseReminderPreferences.formatLeadLabel(clamped)} 提醒（已重新挂闹钟）",
+                message = "已设置：开课前 ${CourseReminderPreferences.formatLeadLabel(clamped)} 提醒" +
+                    if (edu.uestc.eams.helper.server.ServerNotifications.local(getApplication())) "（已重新挂本地闹钟）" else "（服务器设置等待联网同步）",
             )
         }
     }
@@ -1161,6 +1162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // 课表缓存变化后重新挂精确闹钟，保证后台到点仍能提醒
         CourseReminderAlarmScheduler.reschedule(getApplication())
+        edu.uestc.eams.helper.server.ServerUploadWorker.enqueue(getApplication())
     }
 
     /** UI / 缓存 / 课表 meta 依次取当前学期，保证成绩栏也能显示「当前学期」。 */

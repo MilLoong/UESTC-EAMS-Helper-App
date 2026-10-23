@@ -110,6 +110,7 @@ fun ProfileTab(
             tint = MaterialTheme.colorScheme.primary,
         )
         Text("我的", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        MonitorModeCard()
 
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             if (loggedIn && profile != null) {

@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.StringReader
 
 plugins {
     alias(libs.plugins.android.application)
@@ -9,15 +10,18 @@ val uploadKeystorePropertiesFile = rootProject.file("keystore.properties")
 val uploadKeystoreProperties =
     Properties().apply {
         if (uploadKeystorePropertiesFile.exists()) {
-            uploadKeystorePropertiesFile.inputStream().use { load(it) }
+            uploadKeystorePropertiesFile.reader(Charsets.UTF_8).use {
+                load(StringReader(it.readText().removePrefix("\uFEFF")))
+            }
         }
     }
 
 fun uploadSigningReady(): Boolean {
     if (!uploadKeystorePropertiesFile.exists()) return false
     val path = uploadKeystoreProperties.getProperty("storeFile")?.trim().orEmpty()
-    if (path.isEmpty()) return false
-    return rootProject.file(path).isFile
+    check(path.isNotEmpty()) { "keystore.properties: storeFile is missing" }
+    check(rootProject.file(path).isFile) { "keystore.properties: storeFile does not exist" }
+    return true
 }
 
 android {
@@ -32,8 +36,8 @@ android {
         applicationId = "com.milloong.uestc.Helper"
         minSdk = 24
         targetSdk = 36
-        versionCode = 48
-        versionName = "1.3.7"
+        versionCode = 51
+        versionName = "1.3.7-server-mode.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -106,16 +110,6 @@ afterEvaluate {
             println("versionName=$v versionCode=$code")
             println("git tag v$v")
             println("git push origin v$v")
-        }
-    }
-
-    tasks.named("assembleDebug") {
-        doLast {
-            val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
-            val source = apkDir.resolve("app-debug.apk")
-            if (!source.isFile) return@doLast
-            val dest = apkDir.resolve("UESTC-EAMS-Helper.apk")
-            source.copyTo(dest, overwrite = true)
         }
     }
 
@@ -197,6 +191,7 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation("androidx.compose.foundation:foundation")

@@ -22,6 +22,7 @@ class CourseNotificationWorker(
 
     override suspend fun doWork(): Result {
         CourseReminderAlarmScheduler.reschedule(applicationContext)
+        if (!edu.uestc.eams.helper.server.ServerNotifications.local(applicationContext)) return Result.success()
 
         val cache = AcademicCache(applicationContext)
         val meta = cache.loadTimetableMeta()

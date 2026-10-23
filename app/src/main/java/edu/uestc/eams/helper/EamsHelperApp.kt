@@ -49,6 +49,11 @@ class EamsHelperApp : Application() {
         CourseReminderAlarmScheduler.reschedule(this)
         scheduleCourseNotificationFallback()
         scheduleDailyTimetableSync()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "server_notification_receipts", ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<edu.uestc.eams.helper.server.ServerReceiptWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
+        )
     }
 
     private fun scheduleDailyTimetableSync() {

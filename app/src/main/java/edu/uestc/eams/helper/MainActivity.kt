@@ -44,4 +44,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        runCatching { edu.uestc.eams.helper.server.ServerNotifications.startReceiving(this) }
+    }
 }

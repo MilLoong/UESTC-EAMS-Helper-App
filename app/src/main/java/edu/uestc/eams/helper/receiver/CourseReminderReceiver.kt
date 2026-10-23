@@ -15,6 +15,7 @@ class CourseReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != ACTION_FIRE) return
         val app = context.applicationContext
+        if (!edu.uestc.eams.helper.server.ServerNotifications.local(app)) return
         val dateRaw = intent.getStringExtra(EXTRA_DATE).orEmpty()
         val date = runCatching { LocalDate.parse(dateRaw) }.getOrNull() ?: LocalDate.now()
         val startEpoch = intent.getLongExtra(EXTRA_START_EPOCH_SEC, 0L)

@@ -4,6 +4,7 @@ import android.content.Context
 
 /** 上课提醒提前分钟数。 */
 class CourseReminderPreferences(context: Context) {
+    private val appContext = context.applicationContext
 
     private val prefs =
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -15,6 +16,7 @@ class CourseReminderPreferences(context: Context) {
             prefs.edit()
                 .putInt(KEY_LEAD_MINUTES, value.coerceIn(MIN_LEAD_MINUTES, MAX_LEAD_MINUTES))
                 .apply()
+            edu.uestc.eams.helper.server.ServerUploadWorker.enqueue(appContext)
         }
 
     val leadSeconds: Int get() = leadMinutes * 60

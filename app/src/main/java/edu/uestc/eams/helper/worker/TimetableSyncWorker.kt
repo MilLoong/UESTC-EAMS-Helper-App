@@ -14,7 +14,8 @@ class TimetableSyncWorker(
     override suspend fun doWork(): Result {
         val app = applicationContext as? EamsHelperApp ?: return Result.success()
         val repo = app.uestcRepository
-        repo.syncCurrentWeekTimetableIfNeeded()
+        val synced = repo.syncCurrentWeekTimetableIfNeeded()
+        if (synced.isSuccess) edu.uestc.eams.helper.server.ServerUploadWorker.enqueue(applicationContext)
         return Result.success()
     }
 

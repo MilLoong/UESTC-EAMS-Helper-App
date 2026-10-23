@@ -25,6 +25,7 @@ object CourseReminderAlarmScheduler {
     fun reschedule(context: Context) {
         val app = context.applicationContext
         cancelAll(app)
+        if (!edu.uestc.eams.helper.server.ServerNotifications.local(app)) return
         CourseNotificationHelper.ensureChannel(app)
 
         val cache = AcademicCache(app)
