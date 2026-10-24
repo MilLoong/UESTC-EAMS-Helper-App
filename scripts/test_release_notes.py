@@ -21,7 +21,7 @@ class ReleaseNotesTest(unittest.TestCase):
         notes = self.render()
         self.assertIn('## 更新内容\n\n- 扫码页面改为竖屏', notes)
         self.assertIn('versionCode 1', notes)
-        self.assertIn('app-debug.apk', notes)
+        self.assertIn('UESTC-EAMS-Helper.apk', notes)
 
     def test_manual_description_overrides_file(self):
         (self.directory / 'v1.0.0.md').write_text('旧说明', encoding='utf-8')

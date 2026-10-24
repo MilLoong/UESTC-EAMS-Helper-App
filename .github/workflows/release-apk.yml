@@ -158,6 +158,12 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare named release asset
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          cp "$APK_PATH" "$RUNNER_TEMP/release-assets/UESTC-EAMS-Helper.apk"
+          sed -i 's/下载 app-debug\.apk/下载 UESTC-EAMS-Helper.apk/g' release-notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -165,7 +171,7 @@ jobs:
           token: ${{ secrets.RELEASE_REPO_TOKEN }}
           tag_name: ${{ steps.meta.outputs.tag }}
           name: Release ${{ steps.meta.outputs.tag }}
-          files: ${{ env.APK_PATH }}
+          files: ${{ runner.temp }}/release-assets/UESTC-EAMS-Helper.apk
           body_path: release-notes.md
           draft: false
           prerelease: false

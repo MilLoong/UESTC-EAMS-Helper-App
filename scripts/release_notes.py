@@ -20,7 +20,7 @@ def render(tag, version, version_code, manual='', notes_directory='release-notes
             raise ValueError(f'Empty release description: {path}')
     lines = [changes, '',
              f'versionName {version}', f'versionCode {version_code}', '',
-             '下载 app-debug.apk 覆盖安装，无需卸载旧版。']
+             '下载 UESTC-EAMS-Helper.apk 覆盖安装，无需卸载旧版。']
     return '\n'.join(lines) + '\n'
 
 

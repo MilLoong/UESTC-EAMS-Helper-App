@@ -5,7 +5,7 @@
 - 本仓库 **安卓 App**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App>
 - 相关 **Python 命令行工具**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Python>
 - 相关 **课程提醒服务端**：<https://github.com/MilLoong/UESTC-EAMS-Helper-Server>（扫码绑定 / 轮询通知；不登录教务）
-- **下载 APK**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest>（下载 `app-debug.apk` 后安装）
+- **下载 APK**：<https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest>（下载 `UESTC-EAMS-Helper.apk` 后安装）
 
 ## 功能概览
 
@@ -116,7 +116,7 @@
 
 ## 构建与发布
 
-- 推送与 `versionName` 一致的 `v*` 标签后，Actions 自动构建 `app-debug.apk` 并发布 Release
+- 推送与 `versionName` 一致的 `v*` 标签后，Actions 自动构建并以 `UESTC-EAMS-Helper.apk` 上传 Release，本地产物仍为 `app-debug.apk`
 - 发版前在 `release-notes/<tag>.md` 写好该版本更新说明，Actions 原样发布，缺少说明时会提前报错
 - 手动运行 Action 时，`notes` 可覆盖版本说明文件，留空则读取文件
 - 日常调试：`assembleDebug`；对外 APK 仍为 debug 包，建议配置统一上传证书以免与本机/Android 默认 debug 签名冲突，见根目录 `keystore.properties.example`
