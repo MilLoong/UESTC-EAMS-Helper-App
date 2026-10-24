@@ -117,8 +117,8 @@
 ## 构建与发布
 
 - 推送与 `versionName` 一致的 `v*` 标签后，Actions 自动构建 `app-debug.apk` 并发布 Release
-- Release 描述自动汇总上一个版本标签之后的提交记录，首次发布使用当前标签之前的全部提交
-- 手动运行 Action 时，`notes` 可覆盖自动生成的更新内容，留空则使用提交记录
+- 发版前在 `release-notes/<tag>.md` 写好该版本更新说明，Actions 原样发布，缺少说明时会提前报错
+- 手动运行 Action 时，`notes` 可覆盖版本说明文件，留空则读取文件
 - 日常调试：`assembleDebug`；对外 APK 仍为 debug 包，建议配置统一上传证书以免与本机/Android 默认 debug 签名冲突，见根目录 `keystore.properties.example`
 - 本工程默认关闭 `assembleRelease` 相关任务；需要发布包时请自行配置签名与 ProGuard。
 - 用户安装包见 [UESTC-EAMS-Helper-App Releases](https://github.com/MilLoong/UESTC-EAMS-Helper-App/releases/latest)。
