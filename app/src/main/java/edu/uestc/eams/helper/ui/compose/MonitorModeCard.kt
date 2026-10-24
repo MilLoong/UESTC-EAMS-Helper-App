@@ -51,6 +51,7 @@ fun MonitorModeCard() {
     var error by remember { mutableStateOf<String?>(null) }
     var boundServer by remember { mutableStateOf(runCatching { ServerNotifications.read(context).optString("server") }.getOrDefault("")) }
     var pendingQr by remember { mutableStateOf<JSONObject?>(null) }
+    var confirmOfflineLocal by remember { mutableStateOf(false) }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { contents ->
             try {
@@ -113,7 +114,7 @@ fun MonitorModeCard() {
         Text("监听模式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Column(Modifier.fillMaxWidth().padding(vertical = 12.dp).selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("local" to "本地监听", "server" to "服务器监听").forEach { (value, label) ->
-                val selected = if (showServer && mode == "local") value == "server" else mode == value
+                val selected = if (showServer && mode == "local") value == "server" else ServerNotifications.selectedMode(context) == value
                 Row(
                     Modifier.fillMaxWidth().selectable(selected, enabled = !busy, role = Role.RadioButton, onClick = { select(value) }).padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -131,6 +132,9 @@ fun MonitorModeCard() {
         if (busy) Text("正在切换…", style = MaterialTheme.typography.bodySmall)
         if (mode == "switching" && !busy) Text("切换待确认，请重新选择模式", color = MaterialTheme.colorScheme.error)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (!busy && (error != null || mode == "switching" || mode == "blocked")) {
+            TextButton(onClick = { confirmOfflineLocal = true }) { Text("离线恢复本地监听") }
+        }
         if (showServer) {
             Text(
                 if (boundServer.isBlank()) "未绑定服务器" else "已绑定：$boundServer",
@@ -139,7 +143,12 @@ fun MonitorModeCard() {
             )
             Button(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !busy, onClick = {
                 error = null
-                scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false).setPrompt("扫描服务器配对二维码"))
+                scanner.launch(
+                    ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setBeepEnabled(false).setPrompt("扫描服务器配对二维码")
+                        .setOrientationLocked(true)
+                        .setCaptureActivity(edu.uestc.eams.helper.server.PortraitCaptureActivity::class.java),
+                )
             }) {
                 Text(if (boundServer.isBlank()) "扫码绑定" else "重新扫码")
             }
@@ -176,6 +185,27 @@ fun MonitorModeCard() {
                 }
             }
         }
+    }
+    if (confirmOfflineLocal) {
+        AlertDialog(
+            onDismissRequest = { confirmOfflineLocal = false },
+            title = { Text("恢复本地监听？") },
+            text = { Text("手机将停止接收服务器通知，改用本地课表提醒。此操作无法确认旧服务器是否已暂停，服务器仍可能保留并生成提醒记录。联网后可重新选择模式同步状态。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        ServerNotifications.restoreLocalOffline(context)
+                        mode = ServerNotifications.mode(context)
+                        showServer = false
+                        error = null
+                    } catch (e: Exception) {
+                        error = "恢复失败：${e.message}"
+                    }
+                    confirmOfflineLocal = false
+                }) { Text("恢复本地监听") }
+            },
+            dismissButton = { TextButton(onClick = { confirmOfflineLocal = false }) { Text("取消") } },
+        )
     }
     pendingQr?.let { qr ->
         AlertDialog(

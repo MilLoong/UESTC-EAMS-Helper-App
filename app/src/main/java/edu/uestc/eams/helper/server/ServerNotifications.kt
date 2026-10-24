@@ -85,6 +85,24 @@ object ServerNotifications {
     fun mode(context: Context): String = try { read(context).optString("mode", "local") } catch (e: Exception) { "blocked" }
     fun local(context: Context) = mode(context) == "local"
 
+    fun selectedMode(context: Context): String = runCatching {
+        val state = read(context)
+        ServerModePolicy.confirmed(state.optString("mode", "local"), state.optString("last_confirmed_mode"))
+    }.getOrDefault("server")
+
+    fun restoreLocalOffline(context: Context) {
+        context.stopService(Intent(context, ServerNotificationService::class.java))
+        cancelReceive()
+        synchronized(this) {
+            val state = read(context)
+            state.put("mode", "local").put("last_confirmed_mode", "local")
+                .put("remote_unconfirmed", state.has("token"))
+            state.remove("target_mode")
+            write(context, state)
+        }
+        CourseReminderAlarmScheduler.reschedule(context)
+    }
+
     fun validateOrigin(raw: String, localDev: Boolean): String {
         return ServerOrigin.validate(raw, localDev)
     }
@@ -168,19 +186,41 @@ object ServerNotifications {
         val state = read(context)
         if (!state.has("token")) {
             require(mode == "local")
+            synchronized(this@ServerNotifications) {
+                write(context, state.put("mode", "local").put("last_confirmed_mode", "local"))
+            }
             return@withContext
         }
-        synchronized(this@ServerNotifications) { write(context, state.put("mode", "switching")) }
+        val previous = ServerModePolicy.confirmed(state.optString("mode"), state.optString("last_confirmed_mode"))
+        synchronized(this@ServerNotifications) {
+            write(context, state.put("last_confirmed_mode", previous).put("target_mode", mode).put("mode", "switching"))
+        }
         cancelReceive()
         CourseReminderAlarmScheduler.cancelAll(context)
-        if (mode == "server") upload(context)
-        val result = api(context, state, "/devices/me/mode", "PUT", JSONObject().put("mode", mode))
-        check(result.getString("mode") == mode) { "服务器没有确认模式切换" }
-        synchronized(this@ServerNotifications) {
-            val current = read(context)
-            current.put("mode", mode)
-            if (mode == "local") current.put("cursor", result.getLong("cursor"))
-            write(context, current)
+        try {
+            if (mode == "server") upload(context)
+            val result = api(context, state, "/devices/me/mode", "PUT", JSONObject().put("mode", mode))
+            check(result.getString("mode") == mode) { "服务器没有确认模式切换" }
+            synchronized(this@ServerNotifications) {
+                val current = read(context)
+                check(current.optString("token") == state.optString("token")) { "绑定已变更，请重新选择模式" }
+                current.put("mode", mode).put("last_confirmed_mode", mode).put("remote_unconfirmed", false)
+                current.remove("target_mode")
+                if (mode == "local") current.put("cursor", result.getLong("cursor"))
+                write(context, current)
+            }
+        } catch (e: Exception) {
+            synchronized(this@ServerNotifications) {
+                val current = read(context)
+                if (current.optString("token") == state.optString("token")) {
+                    current.put("mode", previous).put("last_confirmed_mode", previous).put("remote_unconfirmed", true)
+                    current.remove("target_mode")
+                    write(context, current)
+                }
+            }
+            if (local(context)) CourseReminderAlarmScheduler.reschedule(context)
+            else if (this@ServerNotifications.mode(context) == "server") runCatching { startReceiving(context) }
+            throw e
         }
     }
 
