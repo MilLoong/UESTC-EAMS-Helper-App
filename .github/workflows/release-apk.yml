@@ -10,7 +10,7 @@
 #   1. 改 app/build.gradle.kts 的 versionCode / versionName
 #   2. git commit && git push origin master
 #   3. git tag v1.1.0 && git push origin v1.1.0
-# 或在 Actions 页手动 Run workflow，填写 tag 与说明。
+# Release 说明默认汇总上一个版本标签之后的提交，手动填写 notes 时覆盖更新内容。
 
 name: Release APK
 
@@ -25,12 +25,12 @@ on:
         required: true
         type: string
       notes:
-        description: "Release 说明，可留空"
+        description: "Release 说明，可留空自动使用提交记录"
         required: false
         type: string
 
 concurrency:
-  group: release-apk-${{ github.ref_name || github.event.inputs.tag }}
+  group: release-apk-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -41,16 +41,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_REPOSITORY: MilLoong/UESTC-EAMS-Helper-App
-      APK_PATH: app/build/outputs/apk/debug/UESTC-EAMS-Helper.apk
+      APK_PATH: app/build/outputs/apk/debug/app-debug.apk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - name: Resolve release tag
         id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
@@ -60,7 +65,7 @@ jobs:
             echo "::error::Release tag is empty"
             exit 1
           fi
-          if ! echo "$TAG" | grep -qE '^v[0-9]'; then
+          if ! echo "$TAG" | grep -qE '^v[0-9][A-Za-z0-9._+-]*$'; then
             echo "::error::Tag must look like v1.0.0, got: $TAG"
             exit 1
           fi
@@ -75,11 +80,14 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version_code=$GRADLE_CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK 17
+      - name: Test release notes generator
+        run: python3 -m unittest discover -s scripts -p test_release_notes.py -v
+
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -131,9 +139,11 @@ jobs:
           ls -lh "$APK_PATH"
 
       - name: Check release token
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
         run: |
-          if [ -z "${{ secrets.RELEASE_REPO_TOKEN }}" ]; then
-            echo "::error::Add secret RELEASE_REPO_TOKEN with repo scope on ${{ env.RELEASE_REPOSITORY }}"
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::Add secret RELEASE_REPO_TOKEN with repo scope on $RELEASE_REPOSITORY"
             exit 1
           fi
 
@@ -141,15 +151,11 @@ jobs:
         env:
           INPUT_NOTES: ${{ github.event.inputs.notes }}
         run: |
-          {
-            if [ -n "$INPUT_NOTES" ]; then
-              printf '%s\n\n' "$INPUT_NOTES"
-            fi
-            echo "versionName ${{ steps.meta.outputs.version }}"
-            echo "versionCode ${{ steps.meta.outputs.version_code }}"
-            echo ""
-            echo "下载 UESTC-EAMS-Helper.apk 覆盖安装。"
-          } > release-notes.md
+          python3 scripts/release_notes.py \
+            --tag '${{ steps.meta.outputs.tag }}' \
+            --version '${{ steps.meta.outputs.version }}' \
+            --version-code '${{ steps.meta.outputs.version_code }}' \
+            --repository "$RELEASE_REPOSITORY"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

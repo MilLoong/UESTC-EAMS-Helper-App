@@ -5,6 +5,9 @@
 # Gradle and Kotlin generated files
 .gradle/
 .kotlin/
+__pycache__/
+*.py[cod]
+/release-notes.md
 **/build/
 
 # Android generated files
